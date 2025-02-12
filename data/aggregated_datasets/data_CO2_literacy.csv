@@ -1,0 +1,101 @@
+country_code,country_name,regime_type,co2_new,literacy_rate
+AFG,Afghanistan,revolutionary,0.16696644693561075,20
+ARE,United Arab Emirates,capitalist_periphery,31.44134020391682,56
+ARG,Argentina,capitalist_periphery,3.3220583366995133,93
+AUS,Australia,capitalist_core,12.012073702242182,100
+AUT,Austria,capitalist_core,8.082767173621416,99
+BDI,Burundi,capitalist_periphery,0.03362095052206831,25
+BEL,Belgium,capitalist_core,12.03495446885757,99
+BEN,Benin,revolutionary,0.09755729108100632,28
+BFA,Burkina Faso,capitalist_periphery,0.0482664700847746,5
+BGD,Bangladesh,capitalist_periphery,0.0670385902508456,26
+BOL,Bolivia,capitalist_periphery,0.6698541853303807,63
+BRA,Brazil,capitalist_periphery,1.1817764127581232,76
+CAF,Central African Republic,capitalist_periphery,0.08847353245381356,33
+CAN,Canada,capitalist_core,15.930177821760026,99
+CHE,Switzerland,capitalist_core,9.286583058496344,99
+CHN,China,socialist,0.9494915629968973,69
+CIV,Cote d'Ivoire,capitalist_periphery,0.3906929582121233,35
+COD,"Congo, DRC",capitalist_periphery,0.1667895280169689,55
+COL,Colombia,capitalist_periphery,1.5265464288228716,81
+CRI,Costa Rica,capitalist_periphery,0.9955134342920496,90
+CUB,Cuba,socialist,2.413284464677635,95
+DNK,Denmark,capitalist_core,10.770045407475097,99
+DOM,Dominican Republic,capitalist_periphery,0.762336401694689,67
+DZA,Algeria,capitalist_periphery,1.4945364820585314,35
+ECU,Ecuador,capitalist_periphery,0.7319550680412319,81
+EGY,Egypt,capitalist_periphery,0.8311643776858532,44
+FIN,Finland,capitalist_core,8.619443861509971,100
+FRA,France,capitalist_core,9.982081384180667,99
+GBR,United Kingdom,capitalist_core,12.338000120564832,99
+GIN,Guinea,capitalist_periphery,0.20819390064948973,20
+HKG,Hong Kong,capitalist_periphery,7.127235883955363,90
+HND,Honduras,capitalist_periphery,0.5174437632167755,60
+HTI,Haiti,capitalist_periphery,0.12427918598847237,23
+HUN,Hungary,socialist,6.42108531660062,99
+IDN,Indonesia,capitalist_periphery,0.3704990259823477,62
+IND,India,capitalist_periphery,0.37526285639619045,36
+IRL,Ireland,capitalist_core,6.001366432484886,98
+IRN,Iran,capitalist_periphery,2.958839038635182,50
+ITA,Italy,capitalist_core,5.741732553048612,98
+JAM,Jamaica,capitalist_periphery,2.753187733986039,90
+JOR,Jordan,capitalist_periphery,1.9672814294527978,70
+JPN,Japan,capitalist_core,7.370644002987971,99
+KEN,Kenya,capitalist_periphery,0.33101333409597655,47
+KOR,South Korea,capitalist_periphery,1.9462495244952958,93
+KWT,Kuwait,capitalist_periphery,61.70973966566964,60
+LAO,Laos,revolutionary,0.17383337777215319,44
+LBR,Liberia,capitalist_periphery,0.8834316483439977,25
+LKA,Sri Lanka,capitalist_periphery,0.2723411774128081,85
+LSO,Lesotho,capitalist_periphery,0.2805175818856618,52
+MAR,Morocco,capitalist_periphery,0.49727942346563253,28
+MDG,Madagascar,revolutionary,0.151124883935245,50
+MEX,Mexico,capitalist_periphery,2.6193075703113604,83
+MLI,Mali,capitalist_periphery,0.053821809469695406,10
+MMR,Myanmar,capitalist_periphery,0.13438029915446806,66
+MNG,Mongolia,socialist,2.134529075973525,95
+MOZ,Mozambique,revolutionary,0.4793889480766538,33
+MRT,Mauritania,capitalist_periphery,0.3173332439299241,17
+MWI,Malawi,capitalist_periphery,0.14632942963149734,25
+MYS,Malaysia,capitalist_periphery,1.1822050232273569,60
+NER,Niger,capitalist_periphery,0.05902309821741043,10
+NGA,Nigeria,capitalist_periphery,0.65805657952109875,34
+NIC,Nicaragua,revolutionary,0.6393064900425226,90
+NLD,Netherlands,capitalist_core,10.15185803776742,99
+NOR,Norway,capitalist_core,10.879579137606742,99
+NPL,Nepal,capitalist_periphery,0.03167073562312531,19
+NZL,New Zealand,capitalist_core,5.582239371816366,99
+PAK,Pakistan,capitalist_periphery,0.3835754984057389,24
+PAN,Panama,capitalist_periphery,2.6347046265091523,85
+PER,Peru,capitalist_periphery,1.2264122621240316,80
+PHL,Philippines,capitalist_periphery,0.6151595857050481,75
+PNG,Papua New Guinea,capitalist_periphery,0.34997758436981297,32
+POL,Poland,socialist,8.6632403254463,98
+PRT,Portugal,capitalist_core,2.1953253026416593,78
+PRY,Paraguay,capitalist_periphery,0.35641196428719824,84
+ROU,Romania,socialist,5.304825709758436,98
+RWA,Rwanda,capitalist_periphery,0.04191933633216661,50
+SAU,Saudi Arabia,capitalist_periphery,7.049459482527797,25
+SEN,Senegal,capitalist_periphery,0.35770026113032916,10
+SGP,Singapore,capitalist_periphery,10.552581046120658,83
+SLE,Sierra Leone,capitalist_periphery,0.2392757697440399,15
+SLV,El Salvador,capitalist_periphery,0.5300853382474775,62
+SOM,Somalia,revolutionary,0.07990038283101997,60
+SUN,USSR,socialist,10.007316088614738,100
+SWE,Sweden,capitalist_core,11.374140308131903,99
+SYR,Syria,capitalist_periphery,1.1988566910984775,58
+TCD,Chad,capitalist_periphery,0.08752936842614503,15
+TGO,Togo,capitalist_periphery,0.1732469821286666,18
+THA,Thailand,capitalist_periphery,0.43862200559577214,86
+TUN,Tunisia,capitalist_periphery,0.8274001955676034,62
+TUR,Turkey,capitalist_periphery,1.3920887725154938,60
+TZA,Tanzania,capitalist_periphery,0.15716859126342547,79
+UGA,Uganda,capitalist_periphery,0.1307247001531149,52
+URY,Uruguay,capitalist_periphery,2.1749724150886802,94
+USA,United States,capitalist_core,20.44277758396635,99
+VEN,Venezuela,capitalist_periphery,3.6474141626498935,82
+VNM,Vietnam,socialist,0.35393109773156844,87
+YEM,Yemen,revolutionary,0.5326883583084371,21
+YUG,Yugoslavia,socialist,4.095396465286535,85
+ZMB,Zambia,capitalist_periphery,1.1093761320184656,44
+ZWE,Zimbabwe,revolutionary,1.5223192966338046,69

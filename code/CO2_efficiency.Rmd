@@ -1,0 +1,2307 @@
+---
+title: "CO2 efficiency"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Preparations
+
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)
+library(tidyverse)
+library(countrycode)
+library(readr)
+library(sandwich)
+library(parameters)
+#library(interactions)
+library(stargazer)
+library(ggplot2)
+library(ggpubr)
+library(knitr) 
+library(scales)
+library(rlang)
+library(jtools)
+
+
+source("local_config.R")
+source(PATH_HELPER_FUNCTIONS)
+source("helper_functions_ecological_efficiency.R")
+
+library(showtext)
+font_add("Latin Modern Roman 10", regular = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-regular.otf", bold = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bold.otf", italic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-italic.otf", bolditalic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bolditalic.otf")
+font_add("Computer Modern Sans", regular = "C:/Windows/Fonts/CMU Sans Serif/cmunss.ttf", bold = "C:/Windows/Fonts/CMU Sans Serif/cmunsx.ttf", italic = "C:/Windows/Fonts/CMU Sans Serif/cmunsi.ttf")
+showtext_auto()
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+data_all <- read_csv("../data/data_all.csv", 
+                     col_types = cols(
+  country_code = col_character(),
+  country_name = col_character(),
+  regime_type = col_character(),
+  year = col_double(),
+  GDP_PPP = col_double(),
+  GDP_MER = col_double(),
+  material_footprint = col_double(),
+  co2 = col_double(),
+  co2_new = col_double(),
+  physical_integrity_rights = col_double(),
+  life_expect = col_double(),
+  equal_distribution = col_double(),
+  population = col_double(),
+  poverty_rate = col_double(),
+  death_rate_malnutrition = col_double(),
+  calorie_availability = col_double(),
+  child_mortality = col_double(),
+  infant_mortality = col_double(),
+  death_rate_sanitation = col_double(),
+  years_schooling = col_double(),
+  former_state = col_character(),
+  electricity_access = col_double(),
+  adolescent_pregnancies = col_double(),
+  doctors = col_double(),
+  female_labour = col_double(),
+  gini_index = col_double(),
+  hospital_beds = col_double(),
+  literacy_rate = col_double(),
+  women_parliament = col_double()
+))
+
+all_countries_considered <- read_csv("../data/all_countries_considered.csv")
+```
+
+
+
+# Basic needs
+
+## BNPL poverty rate
+
+build cross-section
+
+```{r}
+data_CO2_poverty <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "poverty_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_poverty, "../data/aggregated_datasets/data_CO2_poverty.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_poverty %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_poverty <- lm(poverty_rate ~ regime_type*log(co2_new),
+                        data = data_CO2_poverty)
+vcov_CO2_poverty <- vcovHC(model_CO2_poverty, type = "HC3")
+
+parameters(model_CO2_poverty, vcov = vcov_CO2_poverty)
+```
+
+```{r}
+plot(model_CO2_poverty)
+```
+
+strong outlier is Mongolia
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_poverty, 
+                                vcov = vcov_CO2_poverty,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_poverty, 
+          vcov = vcov_CO2_poverty,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_poverty, 
+          vcov = vcov_CO2_poverty,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_poverty, 
+              vcov = vcov_CO2_poverty,
+              pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist", "revolutionary"), data = data_CO2_poverty, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Poverty rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = FALSE, rug=TRUE) 
+```
+
+#### without Mongolia
+
+```{r}
+
+
+
+data_CO2_poverty_without_Mongolia <- data_CO2_poverty %>% filter(country_name != "Mongolia")
+model_CO2_poverty_without_Mongolia <- lm(poverty_rate ~ regime_type*log(co2_new),
+                        data = data_CO2_poverty_without_Mongolia)
+vcov_CO2_poverty_without_Mongolia <- vcovHC(model_CO2_poverty_without_Mongolia, type = "HC3")
+write_csv(data_CO2_poverty_without_Mongolia, "../data/aggregated_datasets/data_CO2_poverty_without_Mongolia.csv")
+
+parameters(model_CO2_poverty_without_Mongolia, vcov = vcov_CO2_poverty_without_Mongolia)
+```
+
+```{r}
+summary(model_CO2_poverty_without_Mongolia)
+```
+
+```{r}
+plot(model_CO2_poverty_without_Mongolia)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_poverty_without_Mongolia, 
+                                vcov = vcov_CO2_poverty_without_Mongolia,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_poverty_without_Mongolia, 
+          vcov = vcov_CO2_poverty_without_Mongolia,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_poverty_without_Mongolia, 
+          vcov = vcov_CO2_poverty_without_Mongolia,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_poverty_without_Mongolia, 
+              vcov = vcov_CO2_poverty_without_Mongolia,
+              pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_poverty_without_Mongolia, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Poverty rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+
+```{r}
+sat_CO2_poverty_rate <- - 0.001* data_CO2_poverty_without_Mongolia$poverty_rate %>% max()
+
+
+
+model_CO2_poverty_without_Mongolia_sat <- lm(log(poverty_rate - sat_CO2_poverty_rate) ~ regime_type*log(co2_new),
+                        data = data_CO2_poverty_without_Mongolia)
+vcov_CO2_poverty_without_Mongolia_sat <- vcovHC(model_CO2_poverty_without_Mongolia_sat, type = "HC3")
+
+parameters(model_CO2_poverty_without_Mongolia_sat, vcov = vcov_CO2_poverty_without_Mongolia_sat)
+```
+
+```{r}
+plot(model_CO2_poverty_without_Mongolia_sat)
+```
+
+```{r}
+summary(model_CO2_poverty_without_Mongolia_sat)
+```
+
+```{r}
+ggintplot(obj = model_CO2_poverty_without_Mongolia_sat, 
+          vcov = vcov_CO2_poverty_without_Mongolia_sat,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1) + xlim(3,NA)
+```
+
+```{r}
+interact_plot(model_CO2_poverty_without_Mongolia_sat, 
+              vcov = vcov_CO2_poverty_without_Mongolia_sat,
+              pred = co2_new, modx = regime_type, modx.values = c( "capitalist_periphery", "socialist"), data = data_CO2_poverty_without_Mongolia, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Poverty rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + coord_trans(y = "exp") + ylim(NA,0.2)
+```
+
+```{r}
+interact_plot_custom(model_CO2_poverty_without_Mongolia_sat, vcov_CO2_poverty_without_Mongolia_sat, data_CO2_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, saturation_level = sat_CO2_poverty_rate, resp = "poverty_rate", #y_max = 100, 
+                     pred = "co2_new", x.label = expression(paste(CO[2], " emissions (tons per capita)")), point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed",
+                     y_max = 100,
+                     #trans_x = "log10"
+                     ) 
+```
+
+
+## Calorie availability
+
+build cross-section
+
+```{r}
+data_CO2_calories <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "calorie_availability") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_calories, "../data/aggregated_datasets/data_CO2_calories.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_calories %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_calories <- lm(calorie_availability ~ regime_type*log(co2_new),
+                        data = data_CO2_calories)
+
+vcov_CO2_calories <- vcovHC(model_CO2_calories, type = "HC3")
+
+parameters(model_CO2_calories, vcov = vcov_CO2_calories)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_calories, 
+                                vcov = vcov_CO2_calories,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_calories, 
+                                vcov = vcov_CO2_calories, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_calories, 
+                                vcov = vcov_CO2_calories, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_calories, 
+                                vcov = vcov_CO2_calories, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_calories, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Average calories per person", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_CO2_calories <- data_CO2_calories$calorie_availability %>% max() * 1.1
+model_CO2_calories_sat <- lm(log(sat_CO2_calories - calorie_availability) ~ regime_type*log(co2_new),
+                        data = data_CO2_calories)
+vcov_CO2_calories_sat <- vcovHC(model_CO2_calories_sat, type = "HC3")
+
+summary(model_CO2_calories_sat)
+```
+```{r}
+ggintplot(obj = model_CO2_calories_sat, 
+                                vcov = vcov_CO2_calories_sat, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+```{r}
+interact_plot(model_CO2_calories_sat, 
+              vcov = vcov_CO2_calories_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_calories, centered = "all", x.label = "CO2 emissions", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") #+ ylim(0,4)
+```
+
+
+```{r}
+interact_plot_custom(model_CO2_calories_sat, 
+              vcov = vcov_CO2_calories_sat, data_CO2_calories, y.label = "Calories per person", reverse = TRUE, percentage = TRUE, saturation_level = sat_CO2_calories, resp = "calorie_availability", #y_max = 100, 
+                     pred = "co2_new", x.label = expression(paste(CO[2], " emissions (tons per capita)")), point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed",
+                     trans_x = "log10") 
+```
+
+## Death rate malnutrition
+
+build cross-section
+
+```{r}
+data_CO2_malnutrition <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, input_variable = "co2_new", outcome_variable = "death_rate_malnutrition") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_malnutrition, "../data/aggregated_datasets/data_CO2_malnutrition.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_malnutrition %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_malnutrition <- lm(death_rate_malnutrition ~ regime_type*log(co2_new),
+                        data = data_CO2_malnutrition)
+
+vcov_CO2_malnutrition <- vcovHC(model_CO2_malnutrition, type = "HC3")
+
+parameters(model_CO2_malnutrition, vcov = vcov_CO2_malnutrition)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_malnutrition, 
+                                vcov = vcov_CO2_malnutrition,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_malnutrition, 
+                                vcov = vcov_CO2_malnutrition, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_malnutrition, 
+                                vcov = vcov_CO2_malnutrition, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_malnutrition, 
+                                vcov = vcov_CO2_malnutrition, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_malnutrition, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)
+```
+
+### saturation curves
+```{r}
+
+sat_CO2_malnutrition <- (data_CO2_malnutrition$death_rate_malnutrition %>% min() * 0.9)
+
+
+model_CO2_malnutrition_sat <- lm(log(death_rate_malnutrition - sat_CO2_malnutrition) ~ regime_type*log(co2_new),
+                        data = data_CO2_malnutrition)
+
+vcov_CO2_malnutrition_sat <- vcovHC(model_CO2_malnutrition_sat, type = "HC3")
+
+```
+
+```{r}
+summary(model_CO2_malnutrition_sat)
+```
+```{r}
+interact_plot(model_CO2_malnutrition_sat, 
+              vcov = vcov_CO2_malnutrition_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_malnutrition, centered = "all", x.label = "CO2 emissions", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp")
+```
+```{r}
+ggintplot(obj = model_CO2_malnutrition_sat, 
+                                vcov = vcov_CO2_malnutrition_sat, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+# Health
+
+## Life expectancy
+
+build cross-sectional dataset
+
+```{r}
+data_CO2_life_expect <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "life_expect") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_life_expect, "../data/aggregated_datasets/data_CO2_life_expect.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_life_expect %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+
+compare to old co2 measure:
+
+```{r}
+data_CO2_old_life_expect_1960 <-
+  data_all %>%
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2", outcome_variable = "life_expect") %>%
+  former_states() %>%
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>%
+  drop_na()
+
+
+```
+
+
+```{r}
+data_compare_co2_1960 <- data_CO2_old_life_expect_1960 %>% full_join(data_CO2_life_expect, by= "country_code") %>% drop_na()
+cor(data_compare_co2_1960$co2, data_compare_co2_1960$co2_new, use = "complete.obs")
+```
+
+
+
+
+### logarithmic curves
+
+
+
+```{r}
+model_CO2_life_expect <- lm(life_expect ~ regime_type*log(co2_new),
+                        data = data_CO2_life_expect)
+vcov_CO2_life_expect <- vcovHC(model_CO2_life_expect, type = "HC3")
+
+parameters(model_CO2_life_expect, vcov = vcov_CO2_life_expect)
+```
+
+```{r}
+summary(model_CO2_life_expect)
+```
+
+```{r}
+plot(model_CO2_life_expect)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_life_expect, 
+                                vcov = vcov_CO2_life_expect,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_life_expect, 
+          vcov = vcov_CO2_life_expect,
+          varnames = c("regime_typesocialist", "log(co2_new)"), 
+          varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_life_expect, 
+          vcov = vcov_CO2_life_expect,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_life_expect, 
+              vcov = vcov_CO2_life_expect,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_life_expect, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Life expectancy (years)", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) +
+  geom_vline(aes(xintercept=5.857117))
+```
+
+
+```{r}
+interact_plot_custom(model_CO2_life_expect, vcov_CO2_life_expect, data = data_CO2_life_expect, pred = "co2_new", x_max = 2,
+                     point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", y.label = "Life expectancy",
+                     reverse = FALSE, percentage = FALSE, resp = "life_expect", 
+                     #y_max = 40, 
+                     #trans_x = "log10", 
+                     #y_min = 0
+                     )
+```
+
+
+### saturation curves
+
+```{r}
+sat_CO2_life_expect <- data_CO2_life_expect$life_expect %>% max() * 1.1
+model_CO2_life_expect_sat <- lm(log(sat_CO2_life_expect - life_expect) ~ regime_type*log(co2_new), 
+                        data = data_CO2_life_expect)
+vcov_CO2_life_expect_sat <- vcovHC(model_CO2_life_expect_sat, type = "HC3")
+
+parameters(model_CO2_life_expect_sat, vcov = vcov_CO2_life_expect_sat)
+```
+
+```{r}
+summary(model_CO2_life_expect_sat)
+```
+
+```{r}
+plot(model_CO2_life_expect_sat)
+```
+
+```{r}
+ggintplot(obj = model_CO2_life_expect_sat, 
+          vcov = vcov_CO2_life_expect_sat,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot(model_CO2_life_expect_sat, 
+              vcov = vcov_CO2_life_expect_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_periphery", "socialist"), 
+              data = data_CO2_life_expect, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+
+## Child mortality
+
+build cross-sectional dataset
+
+```{r}
+data_CO2_child_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "child_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_child_mortality, "../data/aggregated_datasets/data_CO2_child_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_child_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_child_mortality <- lm(child_mortality ~ regime_type*log(co2_new),
+                        data = data_CO2_child_mortality)
+vcov_CO2_child_mortality <- vcovHC(model_CO2_child_mortality, type = "HC3")
+
+parameters(model_CO2_child_mortality, vcov = vcov_CO2_child_mortality)
+```
+
+
+```{r}
+summary(model_CO2_child_mortality)
+```
+
+
+```{r}
+plot(model_CO2_child_mortality)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_child_mortality, 
+                                vcov = vcov_CO2_child_mortality,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_child_mortality, 
+          vcov = vcov_CO2_child_mortality,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_child_mortality, 
+          vcov = vcov_CO2_child_mortality,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_child_mortality, 
+              vcov = vcov_CO2_child_mortality,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_child_mortality, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Child mortality", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)  + ylim(NA, 500)
+```
+
+```{r}
+interact_plot_custom(model_CO2_child_mortality, vcov_CO2_child_mortality, data = data_CO2_child_mortality, pred = "co2_new", x_max = 2,
+                     point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", y.label = "Child mortaity rate",
+                     reverse = TRUE, percentage = TRUE, resp = "child_mortality", 
+                     #y_max = 40, 
+                     #trans_x = "log10", 
+                     y_min = 0)
+```
+
+
+### saturation curves
+```{r}
+sat_CO2_child_mortality <- (data_CO2_child_mortality$child_mortality %>% min() * 0.9)
+
+
+
+model_CO2_child_mortality_sat <- lm(log(child_mortality - sat_CO2_child_mortality) ~ regime_type*log(co2_new),
+                        data = data_CO2_child_mortality)
+vcov_CO2_child_mortality_sat <- vcovHC(model_CO2_child_mortality_sat, type = "HC3")
+
+parameters(model_CO2_child_mortality_sat, vcov = vcov_CO2_child_mortality_sat)
+```
+
+```{r}
+summary(model_CO2_child_mortality_sat)
+```
+
+```{r}
+plot(model_CO2_child_mortality_sat)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_child_mortality_sat, 
+                                vcov = vcov_CO2_child_mortality_sat,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_CO2_child_mortality_sat, 
+          vcov = vcov_CO2_child_mortality_sat,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_CO2_child_mortality_sat, 
+          vcov = vcov_CO2_child_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_child_mortality_sat, 
+              vcov = vcov_CO2_child_mortality_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_child_mortality, centered = "all", x.label = "CO2 emissions", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") #+ ylim(0,4)
+```
+
+```{r}
+interact_plot_custom(model_CO2_child_mortality_sat, vcov_CO2_child_mortality_sat, data = data_CO2_child_mortality, pred = "co2_new", x_max = NA,
+                     point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", y.label = "Child mortality rate",
+                     reverse = TRUE, percentage = TRUE, resp = "child_mortality", 
+                     y_max = 40, 
+                     trans_x = "log10", 
+                     y_min = 0, saturation_level = sat_CO2_child_mortality)
+```
+
+
+## Infant mortality
+
+build cross-sectional dataset
+
+```{r}
+data_CO2_infant_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "infant_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_infant_mortality, "../data/aggregated_datasets/data_CO2_infant_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_infant_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_infant_mortality <- lm(infant_mortality ~ regime_type*log(co2_new),
+                        data = data_CO2_infant_mortality)
+vcov_CO2_infant_mortality <- vcovHC(model_CO2_infant_mortality, type = "HC3")
+
+parameters(model_CO2_infant_mortality, vcov = vcov_CO2_infant_mortality)
+```
+
+```{r}
+plot(model_CO2_infant_mortality)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_infant_mortality, 
+                                vcov = vcov_CO2_infant_mortality,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_infant_mortality, 
+          vcov = vcov_CO2_infant_mortality,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_infant_mortality, 
+          vcov = vcov_CO2_infant_mortality,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_infant_mortality, 
+              vcov = vcov_CO2_infant_mortality,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_infant_mortality, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Infant mortality", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_CO2_infant_mortality <- (data_CO2_infant_mortality$infant_mortality %>% min() * 0.9)
+
+
+
+model_CO2_infant_mortality_sat <- lm(log(infant_mortality - sat_CO2_infant_mortality) ~ regime_type*log(co2_new),
+                        data = data_CO2_infant_mortality)
+vcov_CO2_infant_mortality_sat <- vcovHC(model_CO2_infant_mortality_sat, type = "HC3")
+
+parameters(model_CO2_infant_mortality_sat, vcov = vcov_CO2_infant_mortality_sat)
+```
+
+```{r}
+summary(model_CO2_infant_mortality_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_infant_mortality_sat, 
+                                vcov = vcov_CO2_infant_mortality_sat,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_CO2_infant_mortality_sat, 
+          vcov = vcov_CO2_infant_mortality_sat,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_CO2_infant_mortality_sat, 
+          vcov = vcov_CO2_infant_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_infant_mortality_sat, 
+              vcov = vcov_CO2_infant_mortality_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_infant_mortality, centered = "all", x.label = "CO2 emissions", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp")
+```
+
+
+
+## Doctors
+
+build cross-sectional dataset
+
+```{r}
+data_CO2_doctors <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "doctors") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_doctors, "../data/aggregated_datasets/data_CO2_doctors.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_doctors %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+
+### logarithmic curves
+
+```{r}
+model_CO2_doctors <- lm(doctors ~ regime_type*log(co2_new),
+                        data = data_CO2_doctors)
+vcov_CO2_doctors <- vcovHC(model_CO2_doctors, type = "HC3")
+
+parameters(model_CO2_doctors, vcov = vcov_CO2_doctors)
+```
+
+```{r}
+summary(model_CO2_doctors)
+```
+
+
+```{r}
+plot(model_CO2_doctors)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_doctors, 
+                                vcov = vcov_CO2_doctors,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_doctors, 
+          vcov = vcov_CO2_doctors,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+significant_ranges(obj = model_CO2_doctors, 
+                                              vcov = vcov_CO2_doctors,
+                                              varnames = c("regime_typesocialist", 
+                                                           "log(co2_new)"),
+                                              find_insignificant = TRUE) %>% lapply(exp)
+```
+
+
+```{r}
+ggintplot(obj = model_CO2_doctors, 
+          vcov = vcov_CO2_doctors,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_doctors, 
+              vcov = vcov_CO2_doctors,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_doctors, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Doctors per person", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_CO2_doctors <- data_CO2_doctors$doctors %>% max() * 1.1
+model_CO2_doctors_sat <- lm(log(sat_CO2_doctors - doctors) ~ regime_type*log(co2_new),
+                        data = data_CO2_doctors)
+vcov_CO2_doctors_sat <- vcovHC(model_CO2_doctors_sat, type = "HC3")
+
+summary(model_CO2_doctors_sat)
+```
+
+--> In the case of doctors, the fit is not better for a saturation curve (tested different saturation levels, does not change the pattern)
+--> This is not surprising given the plot for log curves, which actually shows quite a good fit already
+
+
+
+## Hospital beds
+
+build cross-sectional dataset
+
+```{r}
+data_CO2_hospital_beds <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "hospital_beds") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_hospital_beds, "../data/aggregated_datasets/data_CO2_hospital_beds.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_hospital_beds %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_hospital_beds <- lm(hospital_beds ~ regime_type*log(co2_new),
+                        data = data_CO2_hospital_beds)
+vcov_CO2_hospital_beds <- vcovHC(model_CO2_hospital_beds, type = "HC3")
+
+parameters(model_CO2_hospital_beds, vcov = vcov_CO2_hospital_beds)
+```
+
+```{r}
+summary(model_CO2_hospital_beds)
+```
+
+
+```{r}
+plot(model_CO2_hospital_beds)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_hospital_beds, 
+                                vcov = vcov_CO2_hospital_beds,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_hospital_beds, 
+          vcov = vcov_CO2_hospital_beds,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_hospital_beds, 
+          vcov = vcov_CO2_hospital_beds,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_hospital_beds, 
+              vcov = vcov_CO2_hospital_beds,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_hospital_beds, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,5)
+```
+
+### saturation curves
+```{r}
+sat_CO2_hospital_beds <- data_CO2_hospital_beds$hospital_beds %>% max() * 1.1
+model_CO2_hospital_beds_sat <- lm(log(sat_CO2_hospital_beds - hospital_beds) ~ regime_type*log(co2_new),
+                        data = data_CO2_hospital_beds)
+vcov_CO2_hospital_beds_sat <- vcovHC(model_CO2_hospital_beds_sat, type = "HC3")
+
+summary(model_CO2_hospital_beds_sat)
+```
+--> same as for doctors, fit gets worse
+
+
+
+
+
+# Water
+
+## Death rate poor sanitation
+
+build cross-section
+
+```{r}
+data_CO2_sanitation <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, input_variable = "co2_new", outcome_variable = "death_rate_sanitation") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_sanitation, "../data/aggregated_datasets/data_CO2_sanitation.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_sanitation %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_sanitation <- lm(death_rate_sanitation ~ regime_type*log(co2_new),
+                        data = data_CO2_sanitation)
+
+vcov_CO2_sanitation <- vcovHC(model_CO2_sanitation, type = "HC3")
+
+parameters(model_CO2_sanitation, vcov = vcov_CO2_sanitation)
+```
+
+```{r}
+summary(model_CO2_sanitation)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_sanitation, 
+                                vcov = vcov_CO2_sanitation,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_sanitation, 
+                                vcov = vcov_CO2_sanitation, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_sanitation, 
+                                vcov = vcov_CO2_sanitation, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_sanitation, 
+                                vcov = vcov_CO2_sanitation, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_sanitation, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+```{r}
+interact_plot_custom(model_CO2_sanitation, vcov_CO2_sanitation, data = data_CO2_sanitation, pred = "co2_new", x_max = 10,
+                     point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", 
+                     reverse = TRUE, percentage = TRUE, resp = "death_rate_sanitation", 
+                     y_max = 0.2, 
+                     #trans_x = "log10", 
+                     y_min = 0
+                     )
+```
+
+
+
+### saturation curves
+
+```{r}
+sat_CO2_sanitation <- (data_CO2_sanitation$death_rate_sanitation %>% min() * 0.9)
+
+model_CO2_sanitation_sat <- lm(log(death_rate_sanitation - sat_CO2_sanitation) ~
+                                regime_type*log(co2_new),
+                        data = data_CO2_sanitation)
+
+vcov_CO2_sanitation_sat <- vcovHC(model_CO2_sanitation_sat, type = "HC3")
+
+parameters(model_CO2_sanitation_sat, vcov = vcov_CO2_sanitation_sat)
+```
+
+```{r}
+summary(model_CO2_sanitation_sat)
+```
+
+```{r}
+plot(model_CO2_sanitation_sat)
+```
+
+```{r}
+interact_plot(model_CO2_sanitation_sat, 
+                                vcov = vcov_CO2_sanitation_sat, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_sanitation, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + coord_trans(y = "exp") + ylim(-1,6) 
+```
+
+```{r}
+ggintplot(obj = model_CO2_sanitation_sat, 
+                                vcov = vcov_CO2_sanitation_sat, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+# Education
+
+## Schooling
+
+build cross-section
+
+```{r}
+data_CO2_schooling <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "years_schooling") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_schooling, "../data/aggregated_datasets/data_CO2_schooling.csv")
+
+
+writeLines("\nSocialist countries included:")
+data_CO2_schooling %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_schooling <- lm(years_schooling ~ regime_type*log(co2_new),
+                        data = data_CO2_schooling)
+
+vcov_CO2_schooling <- vcovHC(model_CO2_schooling, type = "HC3")
+
+parameters(model_CO2_schooling, vcov = vcov_CO2_schooling)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_schooling, vcov = vcov_CO2_schooling, 
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_schooling, vcov = vcov_CO2_schooling, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_schooling, vcov = vcov_CO2_schooling, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_schooling, vcov = vcov_CO2_schooling, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_schooling, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_CO2_schooling <- data_CO2_schooling$years_schooling %>% max() * 1.1
+model_CO2_schooling_sat <- lm(log(sat_CO2_schooling - years_schooling) ~ regime_type*log(co2_new), 
+                        data = data_CO2_schooling)
+vcov_CO2_schooling_sat <- vcovHC(model_CO2_schooling_sat, type = "HC3")
+
+parameters(model_CO2_schooling_sat, vcov = vcov_CO2_schooling_sat)
+```
+```{r}
+summary(model_CO2_schooling_sat)
+```
+```{r}
+plot(model_CO2_schooling_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_schooling_sat, 
+                                vcov = vcov_CO2_schooling_sat,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_CO2_schooling_sat, 
+          vcov = vcov_CO2_schooling_sat,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot(model_CO2_schooling_sat, 
+              vcov = vcov_CO2_schooling_sat,
+              pred = co2_new, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_CO2_schooling, centered = "all", x.label = "CO2 emissions", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") + ylim(0,2.5)
+```
+
+
+## Adult literacy
+
+build cross-section
+
+```{r}
+data_CO2_literacy <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "literacy_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_literacy, "../data/aggregated_datasets/data_CO2_literacy.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_literacy %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_literacy <- lm(literacy_rate ~ regime_type*log(co2_new),
+                        data = data_CO2_literacy)
+
+vcov_CO2_literacy <- vcovHC(model_CO2_literacy, type = "HC3")
+
+parameters(model_CO2_literacy, vcov = vcov_CO2_literacy)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_literacy, vcov = vcov_CO2_literacy, 
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_literacy, vcov = vcov_CO2_literacy, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_literacy, vcov = vcov_CO2_literacy, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_literacy, vcov = vcov_CO2_literacy, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_literacy, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)  + ylim(NA, 120)
+```
+
+### saturation curves
+
+```{r}
+sat_CO2_literacy <- 100.1
+
+
+model_CO2_literacy_sat <- lm(log(sat_CO2_literacy-literacy_rate) ~ regime_type*log(co2_new),
+                        data = data_CO2_literacy)
+
+vcov_CO2_literacy_sat <- vcovHC(model_CO2_literacy_sat, type = "HC3")
+
+```
+
+```{r}
+interact_plot(model_CO2_literacy_sat, vcov = vcov_CO2_literacy_sat, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_literacy, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)  + ylim(-5, 10) + xlim(0,2)
+```
+
+```{r}
+ggintplot(obj = model_CO2_literacy_sat, vcov = vcov_CO2_literacy_sat, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+# Energy
+
+## Access to electricity
+
+build cross-section
+
+```{r}
+data_CO2_electricity <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, input_variable = "co2_new", outcome_variable = "electricity_access") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_electricity, "../data/aggregated_datasets/data_CO2_electricity.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_electricity %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_electricity <- lm(electricity_access ~ regime_type*log(co2_new),
+                        data = data_CO2_electricity) 
+
+vcov_CO2_electricity <- vcovHC(model_CO2_electricity, type = "HC3")
+
+parameters(model_CO2_electricity, vcov = vcov_CO2_electricity)
+```
+
+```{r}
+plot(model_CO2_electricity)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_electricity, 
+                                vcov = vcov_CO2_electricity,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_electricity, 
+                                vcov = vcov_CO2_electricity, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_electricity, 
+                                vcov = vcov_CO2_electricity, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_electricity, 
+                                vcov = vcov_CO2_electricity, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_electricity, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)  + ylim(NA, 150)
+```
+
+#### without North Korea
+
+```{r}
+data_CO2_electricity_without_North_Korea <-  data_CO2_electricity %>% filter(country_name!="North Korea")
+write_csv(data_CO2_electricity_without_North_Korea, "../data/aggregated_datasets/data_CO2_electricity_without_North_Korea.csv")
+
+
+model_CO2_electricity_without_North_Korea <- lm(electricity_access ~ regime_type*log(co2_new),
+                        data = data_CO2_electricity_without_North_Korea)
+
+vcov_CO2_electricity_without_North_Korea <- vcovHC(model_CO2_electricity_without_North_Korea, type = "HC3")
+
+parameters(model_CO2_electricity_without_North_Korea, vcov = vcov_CO2_electricity_without_North_Korea)
+```
+```{r}
+summary(model_CO2_electricity_without_North_Korea)
+```
+
+
+
+
+```{r}
+plot(model_CO2_electricity_without_North_Korea)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_electricity_without_North_Korea, 
+                                vcov = vcov_CO2_electricity_without_North_Korea,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_electricity_without_North_Korea, 
+                                vcov = vcov_CO2_electricity_without_North_Korea, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_electricity_without_North_Korea, 
+                                vcov = vcov_CO2_electricity_without_North_Korea, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_electricity_without_North_Korea, 
+                                vcov = vcov_CO2_electricity_without_North_Korea, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_electricity, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)  + ylim(0, 150)
+```
+
+```{r}
+interact_plot_custom(model_CO2_electricity_without_North_Korea, vcov_CO2_electricity_without_North_Korea, data = data_CO2_electricity_without_North_Korea, pred = "co2_new", x_max = NA,
+                     point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", y.label = "Access to electricity",
+                     reverse = FALSE, percentage = FALSE, resp = "electricity_access", 
+                     y_max = 100, 
+                     #trans_x = "log10", 
+                     #y_min = 0
+                     )
+```
+
+
+
+### saturation curves
+
+```{r}
+
+sat_CO2_electricity <- 100.1
+
+model_CO2_electricity_without_North_Korea_sat <- lm(log(sat_CO2_electricity - electricity_access) ~ regime_type*log(co2_new),
+                        data = data_CO2_electricity_without_North_Korea)
+
+vcov_CO2_electricity_without_North_Korea_sat <- vcovHC(model_CO2_electricity_without_North_Korea_sat, type = "HC3")
+
+```
+
+```{r}
+summary(model_CO2_electricity_without_North_Korea_sat)
+```
+
+
+
+```{r}
+interact_plot(model_CO2_electricity_without_North_Korea_sat, 
+                                vcov = vcov_CO2_electricity_without_North_Korea_sat, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_electricity, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE)
+```
+```{r}
+ggintplot(obj = model_CO2_electricity_without_North_Korea_sat, 
+                                vcov = vcov_CO2_electricity_without_North_Korea_sat, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+# Social equity
+
+## Gini index
+
+build cross-section
+
+```{r}
+data_CO2_gini <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "gini_index") %>% 
+  mutate(gini_index = # fill missing values for certain socialist countries with next year available
+           case_match(
+             country_name,
+             "Poland"  ~ 
+               data_all %>% 
+               filter(country_name == "Poland", year == 1983) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Bulgaria" ~
+               data_all %>% 
+               filter(country_name == "Bulgaria", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Romania" ~
+               data_all %>% 
+               filter(country_name == "Romania", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             .default = gini_index)
+         ) %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na() %>% 
+  filter(regime_type != "revolutionary")
+write_csv(data_CO2_gini, "../data/aggregated_datasets/data_CO2_gini.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_gini %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_gini <- lm(gini_index ~ regime_type*log(co2_new),
+                        data = data_CO2_gini)
+
+vcov_CO2_gini <- vcovHC(model_CO2_gini, type = "HC3")
+
+parameters(model_CO2_gini, vcov = vcov_CO2_gini)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_gini, 
+                                vcov = vcov_CO2_gini,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_gini, 
+                                vcov = vcov_CO2_gini, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_gini, 
+                                vcov = vcov_CO2_gini, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_gini, 
+                                vcov = vcov_CO2_gini, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_gini, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+
+## Social services quality
+
+build cross-sectional dataset
+
+```{r}
+data_co2_social_services <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "social_services") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_co2_social_services, "../data/aggregated_datasets/data_co2_social_services.csv")
+
+writeLines("\nSocialist countries included:")
+data_co2_social_services %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_co2_social_services <- lm(social_services ~ regime_type*log(co2_new), 
+                        data = data_co2_social_services)
+vcov_co2_social_services <- vcovHC(model_co2_social_services, type = "HC3")
+
+parameters(model_co2_social_services, vcov = vcov_co2_social_services)
+```
+
+```{r}
+summary(model_co2_social_services)
+```
+
+
+
+### saturation curves
+```{r}
+sat_co2_social_services <- 1
+model_co2_social_services_sat <- lm(log(sat_co2_social_services - social_services) ~ regime_type*log(co2_new),
+                        data = data_co2_social_services)
+vcov_co2_social_services_sat <- vcovHC(model_co2_social_services_sat, type = "HC3")
+
+summary(model_co2_social_services_sat)
+```
+```{r}
+interact_plot_custom(model_co2_social_services_sat, 
+              vcov = vcov_co2_social_services_sat,
+              saturation_level = sat_co2_social_services,
+              pred = "co2_new",
+              resp = "social_services",
+              data = data_co2_social_services, insignificant_lines = "dashed", x.label = "CO2 emissions", y.label = "Equal resource distriution index", 
+              ) 
+```
+
+
+# Gender equality
+
+## Women in parliament
+
+build cross-section
+
+```{r}
+data_CO2_women_parliament <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "women_parliament") %>% 
+  as.data.frame() %>% 
+  {mutate(.,women_parliament= case_match(
+    .$country_name, 
+    "USSR" ~ .[which(.$former_state == "USSR"), "women_parliament"][1],
+    "Czechoslovakia" ~ .[which(.$former_state == "CSK"), "women_parliament"][1],
+    "Yugoslavia" ~ .[which(.$former_state == "Yugo"), "women_parliament"][1],
+    .default = .$women_parliament))} %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_women_parliament, "../data/aggregated_datasets/data_CO2_women_parliament.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_women_parliament %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_women_parliament <- lm(women_parliament ~ regime_type*log(co2_new),
+                        data = data_CO2_women_parliament)
+
+vcov_CO2_women_parliament <- vcovHC(model_CO2_women_parliament, type = "HC3")
+
+parameters(model_CO2_women_parliament, vcov = vcov_CO2_women_parliament)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_women_parliament, 
+                                vcov = vcov_CO2_women_parliament,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_women_parliament, 
+                                vcov = vcov_CO2_women_parliament, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_women_parliament, 
+                                vcov = vcov_CO2_women_parliament, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_women_parliament, 
+                                vcov = vcov_CO2_women_parliament, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_women_parliament, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+## Female labour income share
+
+build cross-sectional dataset
+
+```{r}
+data_co2_female_labour_income <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1991, year_outcome = 1991, input_variable = "co2_new", outcome_variable = "female_labour_income") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_co2_female_labour_income, "../data/aggregated_datasets/data_co2_female_labour_income.csv")
+
+writeLines("\nSocialist countries included:")
+data_co2_female_labour_income %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_co2_female_labour_income <- lm(female_labour_income ~ regime_type*log(co2_new), 
+                        data = data_co2_female_labour_income)
+vcov_co2_female_labour_income <- vcovHC(model_co2_female_labour_income, type = "HC3")
+
+parameters(model_co2_female_labour_income, vcov = vcov_co2_female_labour_income)
+```
+
+```{r}
+summary(model_co2_female_labour_income)
+```
+
+
+```{r}
+plot(model_co2_female_labour_income)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_co2_female_labour_income, 
+                                vcov = vcov_co2_female_labour_income,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_co2_female_labour_income, 
+          vcov = vcov_co2_female_labour_income,
+          varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", "CO2 emissions"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_co2_female_labour_income, 
+          vcov = vcov_co2_female_labour_income,
+          varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", "CO2 emissions, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_co2_female_labour_income, 
+              vcov = vcov_co2_female_labour_income,
+              pred = "co2_new",
+              
+              data = data_co2_female_labour_income, insignificant_lines = "dashed", x.label = "CO2 emissions", y.label = "Female labour income share", 
+              ) 
+```
+
+
+
+
+
+## Female labor force participation
+
+build cross-section
+
+```{r}
+data_CO2_female_labour <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, input_variable = "co2_new", outcome_variable = "female_labour") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_female_labour, "../data/aggregated_datasets/data_CO2_female_labour.csv")
+
+
+writeLines("\nSocialist countries included:")
+data_CO2_female_labour %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_female_labour <- lm(female_labour ~ regime_type*log(co2_new),
+                        data = data_CO2_female_labour)
+
+vcov_CO2_female_labour <- vcovHC(model_CO2_female_labour, type = "HC3")
+
+parameters(model_CO2_female_labour, vcov = vcov_CO2_female_labour)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_female_labour, 
+                                vcov = vcov_CO2_female_labour,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_female_labour, 
+                                vcov = vcov_CO2_female_labour, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_female_labour, 
+                                vcov = vcov_CO2_female_labour, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_female_labour, 
+                                vcov = vcov_CO2_female_labour, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_female_labour, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Female labour force participation", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+## Adolescent fertility rate
+
+build cross-section
+
+```{r}
+data_CO2_adolescent_pregnancies <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "adolescent_pregnancies") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_CO2_adolescent_pregnancies, "../data/aggregated_datasets/data_CO2_adolescent_pregnancies.csv")
+
+writeLines("\nSocialist countries included:")
+data_CO2_adolescent_pregnancies %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_CO2_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type*log(co2_new),
+                        data = data_CO2_adolescent_pregnancies)
+
+vcov_CO2_adolescent_pregnancies <- vcovHC(model_CO2_adolescent_pregnancies, type = "HC3")
+
+parameters(model_CO2_adolescent_pregnancies, vcov = vcov_CO2_adolescent_pregnancies)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_CO2_adolescent_pregnancies, 
+                                vcov = vcov_CO2_adolescent_pregnancies,
+                                pred = "log(co2_new)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_CO2_adolescent_pregnancies, 
+                                vcov = vcov_CO2_adolescent_pregnancies, varnames = c("regime_typesocialist", "log(co2_new)"), varlabs=c("socialist regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_CO2_adolescent_pregnancies, 
+                                vcov = vcov_CO2_adolescent_pregnancies, varnames = c("regime_typecapitalist_core", "log(co2_new)"), varlabs=c("capitalist core regime type", expression(paste(CO[2], " emissions (tons per capita)"))),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_CO2_adolescent_pregnancies, 
+                                vcov = vcov_CO2_adolescent_pregnancies, pred = co2_new, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_CO2_adolescent_pregnancies, centered = "all", x.label = expression(paste(CO[2], " emissions (tons per capita)")), y.label = "Adolescent pregnancy rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+# Political voice
+## Physical integrity rights index
+
+
+
+build cross-sectional dataset
+
+```{r}
+data_co2_physical_integrity_rights <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "co2_new", outcome_variable = "physical_integrity_rights") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_co2_physical_integrity_rights, "../data/aggregated_datasets/data_co2_physical_integrity_rights.csv")
+
+writeLines("\nSocialist countries included:")
+data_co2_physical_integrity_rights %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_co2_physical_integrity_rights <- lm(physical_integrity_rights ~ regime_type*log(co2_new), 
+                        data = data_co2_physical_integrity_rights)
+vcov_co2_physical_integrity_rights <- vcovHC(model_co2_physical_integrity_rights, type = "HC3")
+
+parameters(model_co2_physical_integrity_rights, vcov = vcov_co2_physical_integrity_rights)
+```
+
+```{r}
+summary(model_co2_physical_integrity_rights)
+```
+
+
+
+### saturation curves
+```{r}
+sat_co2_physical_integrity_rights <- 1
+model_co2_physical_integrity_rights_sat <- lm(log(sat_co2_physical_integrity_rights - physical_integrity_rights) ~ regime_type*log(co2_new),
+                        data = data_co2_physical_integrity_rights)
+vcov_co2_physical_integrity_rights_sat <- vcovHC(model_co2_physical_integrity_rights_sat, type = "HC3")
+
+summary(model_co2_physical_integrity_rights_sat)
+```
+```{r}
+interact_plot_custom(model_co2_physical_integrity_rights_sat, 
+              vcov = vcov_co2_physical_integrity_rights_sat,
+              saturation_level = sat_co2_physical_integrity_rights,
+              pred = "co2_new",
+              resp = "physical_integrity_rights",
+              data = data_co2_physical_integrity_rights, insignificant_lines = "dashed", x.label = "CO2 emissions", y.label = "Physical integrity rights index", 
+              ) 
+```
+
+
+
+
+
+# Trellis
+```{r}
+argument_list_CO2 <- list(pred = "co2_new", x.label = expression(paste(CO[2], " emissions (tons per capita)")), x_max = 15, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", physical_boundary = 3.802347)
+```
+
+
+## Selection main part 
+
+```{r}
+
+
+
+
+interact_plot_poverty_without_Mongolia <- do.call(interact_plot_custom, c(list(model_CO2_poverty_without_Mongolia_sat, vcov_CO2_poverty_without_Mongolia_sat, data_CO2_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, saturation_level = sat_CO2_poverty_rate, resp = "poverty_rate", y_max = 100), argument_list_CO2))
+
+
+
+interact_plot_life_expect <- do.call(interact_plot_custom, c(list(model_CO2_life_expect_sat, vcov_CO2_life_expect_sat, data_CO2_life_expect,  y.label = "Life expectancy (years)", 
+                                                                  resp = "life_expect",
+                                                                  saturation_level = sat_CO2_life_expect,
+                                                                  y_max = 80), argument_list_CO2))
+
+
+interact_plot_sanitation <- do.call(interact_plot_custom, c(list(model_CO2_sanitation_sat, vcov_CO2_sanitation_sat, data_CO2_sanitation, y.label = "Poor sanitation death rate", reverse = TRUE, res = "death_rate_sanitation", saturation_level = sat_CO2_sanitation, y_max = 0.4, percentage = TRUE), argument_list_CO2))
+
+
+interact_plot_schooling <- do.call(interact_plot_custom, c(list(model_CO2_schooling_sat, vcov_CO2_schooling_sat, data_CO2_schooling, y.label = "Years of schooling", resp = "years_schooling", saturation_level = sat_CO2_schooling), argument_list_CO2))
+
+interact_plot_electricity <- do.call(interact_plot_custom, c(list(model_CO2_electricity_without_North_Korea_sat, vcov_CO2_electricity_without_North_Korea_sat, data_CO2_electricity_without_North_Korea, y.label = "Access to electricity", y_max = 100, resp = "electricity_access", saturation_level = sat_CO2_electricity, percentage = TRUE), argument_list_CO2))
+                                     
+
+
+
+
+interact_plot_gini <- do.call(interact_plot_custom, c(list(model_CO2_gini, vcov_CO2_gini, data_CO2_gini, y.label = "Gini index", reverse = TRUE), argument_list_CO2))
+
+interact_plot_women_parliament <- do.call(interact_plot_custom, c(list(model_CO2_women_parliament, vcov_CO2_women_parliament, data_CO2_women_parliament, y.label = "Female parliament members", percentage = TRUE), argument_list_CO2))
+
+
+interact_plot_physical_integrity_rights <- do.call(interact_plot_custom, c(list(model_co2_physical_integrity_rights_sat, vcov_co2_physical_integrity_rights_sat, data_co2_physical_integrity_rights,  y.label = "Physical integrity rights index", 
+                                                                  resp = "physical_integrity_rights",
+                                                                  saturation_level = sat_co2_physical_integrity_rights), argument_list_CO2))
+
+
+
+```
+
+
+```{r}
+
+ggarrange(
+  interact_plot_poverty_without_Mongolia + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_life_expect + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_sanitation + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_schooling + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_electricity + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_gini + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_women_parliament,
+  interact_plot_physical_integrity_rights,
+  nrow = 4, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_CO2_main_part.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+```
+
+
+## Rest of indicators
+```{r}
+
+
+interact_plot_calories <- do.call(interact_plot_custom, c(list(model_CO2_calories, vcov_CO2_calories, data_CO2_calories, y.label = "Calories per person", resp = "calorie_availability", y_min = 1500), argument_list_CO2))
+
+interact_plot_malnutrition <- do.call(interact_plot_custom, c(list(model_CO2_malnutrition_sat, vcov_CO2_malnutrition_sat, data_CO2_malnutrition, y.label = "Malnutrition death rate", reverse = TRUE, ignore_significance_right = FALSE, percentage = TRUE, resp = "death_rate_malnutrition", saturation_level = sat_CO2_malnutrition, y_max = 0.165), argument_list_CO2))
+
+
+
+interact_plot_child_mortality <- do.call(interact_plot_custom, c(list(model_CO2_child_mortality_sat, vcov_CO2_child_mortality_sat, data_CO2_child_mortality, y.label = "Child mortality rate", reverse = TRUE, percentage = TRUE, resp = "child_mortality", saturation_level = sat_CO2_child_mortality, y_max = 33), argument_list_CO2))
+
+interact_plot_infant_mortality <- do.call(interact_plot_custom, c(list(model_CO2_infant_mortality_sat, vcov_CO2_infant_mortality_sat, data_CO2_infant_mortality, y.label = "Infant mortality rate", reverse = TRUE, percentage = TRUE, resp = "infant_mortality", saturation_level = sat_CO2_infant_mortality, y_max = 18.5), argument_list_CO2))
+
+interact_plot_doctors <- do.call(interact_plot_custom, c(list(model_CO2_doctors, vcov_CO2_doctors, data_CO2_doctors, y.label = "Doctors per 1000 people"), argument_list_CO2))
+
+interact_plot_hospital_beds <- do.call(interact_plot_custom, c(list(model_CO2_hospital_beds, vcov_CO2_hospital_beds, data_CO2_hospital_beds, y.label = "Hospital beds per 1000 people"), argument_list_CO2))
+
+
+interact_plot_literacy <- do.call(interact_plot_custom, c(list(model_CO2_literacy_sat, vcov_CO2_literacy_sat, data_CO2_literacy, y.label = "Adult literacy", y_max = 100, percentage = TRUE, resp = "literacy_rate", sat_CO2_literacy), argument_list_CO2))
+
+interact_plot_social_services <- do.call(interact_plot_custom, c(list(model_co2_social_services_sat, vcov_co2_social_services_sat, data_co2_social_services, y.label = "Social services quality",  resp = "social_services", sat_co2_social_services), argument_list_CO2))
+
+
+interact_plot_female_labour <- do.call(interact_plot_custom, c(list(model_CO2_female_labour, vcov_CO2_female_labour, data_CO2_female_labour, y.label = "Female labour force participation", percentage = TRUE), argument_list_CO2))
+
+interact_plot_female_labour_income <- do.call(interact_plot_custom, c(list(model_co2_female_labour_income, vcov_co2_female_labour_income, data_co2_female_labour_income, y.label = "Female labour income share", percentage = TRUE), argument_list_CO2))
+
+
+interact_plot_adolescent_pregnancies <- do.call(interact_plot_custom, c(list(model_CO2_adolescent_pregnancies, vcov_CO2_adolescent_pregnancies, data_CO2_adolescent_pregnancies, y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE), argument_list_CO2))
+```
+
+```{r}
+
+ggarrange(
+  interact_plot_calories + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_malnutrition + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_child_mortality + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_infant_mortality + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_doctors,
+  interact_plot_hospital_beds, 
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_CO2_extended_data_1.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+
+
+
+ggarrange(
+  interact_plot_literacy + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_social_services + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_female_labour +
+    theme(axis.title.x = element_blank()),
+  interact_plot_female_labour_income,
+  interact_plot_adolescent_pregnancies,
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_CO2_extended_data_2.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+```
+
+
+
+# SuppInf 
+
+```{r}
+
+generate_supplementary_information(model = model_CO2_life_expect, vcov = vcov_CO2_life_expect, model_sat = model_CO2_life_expect_sat, vcov_sat = vcov_CO2_life_expect_sat, data = data_CO2_life_expect, pred = "co2_new", resp = "life_expect", y.label = "Life expectancy (years)", percentage = FALSE, reverse = FALSE, sat = sat_CO2_life_expect, y_max = NA)
+
+
+
+generate_supplementary_information(model = model_CO2_child_mortality, vcov = vcov_CO2_child_mortality, model_sat = model_CO2_child_mortality_sat, vcov_sat = vcov_CO2_child_mortality_sat, data = data_CO2_child_mortality, pred = "co2_new", resp = "child_mortality", y.label = "Child mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_CO2_child_mortality, y_max = 33, y_min = 0, natural_extremum = FALSE)
+
+generate_supplementary_information(model = model_CO2_infant_mortality, vcov = vcov_CO2_infant_mortality, model_sat = model_CO2_infant_mortality_sat, vcov_sat = vcov_CO2_infant_mortality_sat, data = data_CO2_infant_mortality, pred = "co2_new", resp = "infant_mortality", y.label = "Infant mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_CO2_infant_mortality, y_max = 18.5, y_min = 0, natural_extremum = FALSE)
+
+generate_supplementary_information(model = model_CO2_doctors, vcov = vcov_CO2_doctors, model_sat = model_CO2_doctors_sat, vcov_sat = vcov_CO2_doctors_sat, data = data_CO2_doctors, pred = "co2_new", resp = "doctors", y.label = "Doctors per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_CO2_doctors, y_max = NA)
+
+generate_supplementary_information(model = model_CO2_hospital_beds, vcov = vcov_CO2_hospital_beds, model_sat = model_CO2_hospital_beds_sat, vcov_sat = vcov_CO2_hospital_beds_sat, data = data_CO2_hospital_beds, pred = "co2_new", resp = "hospital_beds", y.label = "Hospital beds per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_CO2_hospital_beds, y_max = NA)
+
+generate_supplementary_information(model = model_CO2_poverty_without_Mongolia, vcov = vcov_CO2_poverty_without_Mongolia, model_sat = model_CO2_poverty_without_Mongolia_sat, vcov_sat = vcov_CO2_poverty_without_Mongolia_sat, data = data_CO2_poverty_without_Mongolia, pred = "co2_new", resp = "poverty_rate", y.label = "Basic needs poverty rate", percentage = TRUE, reverse = TRUE, sat = sat_CO2_poverty_rate, y_max = 100, y_min = 0)
+
+generate_supplementary_information(model = model_CO2_calories, vcov = vcov_CO2_calories, model_sat = model_CO2_calories_sat, vcov_sat = vcov_CO2_calories_sat, data = data_CO2_calories, pred = "co2_new", resp = "calorie_availability", y.label = "Calories per person", percentage = FALSE, reverse = FALSE, sat = sat_CO2_calories, y_max = NA)
+
+generate_supplementary_information(model = model_CO2_malnutrition, vcov = vcov_CO2_malnutrition, model_sat = model_CO2_malnutrition_sat, vcov_sat = vcov_CO2_malnutrition_sat, data = data_CO2_malnutrition, pred = "co2_new", resp = "death_rate_malnutrition", y.label = "Malnutrition death rate", percentage = TRUE, reverse = TRUE, sat = sat_CO2_malnutrition, y_max = 0.165, y_min = 0, natural_extremum = FALSE)
+
+generate_supplementary_information(model = model_CO2_schooling, vcov = vcov_CO2_schooling, model_sat = model_CO2_schooling_sat, vcov_sat = vcov_CO2_schooling_sat, data = data_CO2_schooling, pred = "co2_new", resp = "years_schooling", y.label = "Years of schooling", percentage = FALSE, reverse = FALSE, sat = sat_CO2_schooling, y_max = NA)
+
+generate_supplementary_information(model = model_CO2_literacy, vcov = vcov_CO2_literacy, model_sat = model_CO2_literacy_sat, vcov_sat = vcov_CO2_literacy_sat, data = data_CO2_literacy, pred = "co2_new", resp = "literacy_rate", y.label = "Adult literacy", percentage = TRUE, reverse = FALSE, sat = sat_CO2_literacy, y_max = 100)
+
+
+generate_supplementary_information(model = model_CO2_sanitation, vcov = vcov_CO2_sanitation, model_sat = model_CO2_sanitation_sat, vcov_sat = vcov_CO2_sanitation_sat, data = data_CO2_sanitation, pred = "co2_new", resp = "death_rate_sanitation", y.label = "Poor sanitation death rate", percentage = TRUE, reverse = TRUE, sat = sat_CO2_sanitation, y_max = 0.4, y_min = 0, natural_extremum = FALSE)
+
+generate_supplementary_information(model = model_co2_electricity_without_North_Korea, vcov = vcov_co2_electricity_without_North_Korea, model_sat = model_co2_electricity_without_North_Korea_sat, vcov_sat = vcov_co2_electricity_without_North_Korea_sat, data = data_co2_electricity_without_North_Korea, pred = "co2_new", resp = "electricity_access", y.label = "Access to electricity", percentage = TRUE, reverse = FALSE, sat = sat_co2_electricity, y_max = 100)
+
+generate_supplementary_information(model = model_co2_physical_integrity_rights, vcov = vcov_co2_physical_integrity_rights, model_sat = model_co2_physical_integrity_rights_sat, vcov_sat = vcov_co2_physical_integrity_rights_sat, data = data_co2_physical_integrity_rights, pred = "co2_new", resp = "physical_integrity_rights", y.label = "Physical integrity rights index", percentage = FALSE, reverse = FALSE, sat = sat_co2_physical_integrity_rights, y_max = 1)
+
+generate_supplementary_information(model_co2_gini, vcov_co2_gini, data = data_co2_gini, pred = "co2_new", resp = "gini_index", y.label = "Gini index", percentage = FALSE, reverse = TRUE, y_max = NA)
+
+generate_supplementary_information(model = model_co2_social_services, vcov = vcov_co2_social_services, model_sat = model_co2_social_services_sat, vcov_sat = vcov_co2_social_services_sat, data = data_co2_social_services, pred = "co2_new", resp = "social_services", y.label = "Social services quality", percentage = FALSE, reverse = FALSE, sat = sat_co2_social_services, y_max = 1)
+
+
+generate_supplementary_information(model = model_co2_women_parliament, vcov = vcov_co2_women_parliament, data = data_co2_women_parliament, pred = "co2_new", resp = "women_parliament", y.label = "Female parliament members", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_co2_female_labour, vcov = vcov_co2_female_labour, data = data_co2_female_labour, pred = "co2_new", resp = "female_labour", y.label = "Female labour force participation", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_co2_female_labour_income, vcov = vcov_co2_female_labour_income, data = data_co2_female_labour_income, pred = "co2_new", resp = "female_labour_income", y.label = "Female labour income share", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_co2_adolescent_pregnancies, vcov = vcov_co2_adolescent_pregnancies, data = data_co2_adolescent_pregnancies, pred = "co2_new", resp = "adolescent_pregnancies", y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE, y_max = NA)
+
+```

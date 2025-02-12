@@ -1,0 +1,2291 @@
+---
+title: "MF efficiency"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Preparations
+
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)
+library(tidyverse)
+library(countrycode)
+library(readr)
+library(sandwich)
+library(parameters)
+#library(interactions)
+library(stargazer)
+library(ggplot2)
+library(ggpubr)
+library(knitr) 
+library(scales)
+library(rlang)
+library(jtools)
+
+
+source("local_config.R")
+source(PATH_HELPER_FUNCTIONS)
+source("helper_functions_ecological_efficiency.R")
+
+library(showtext)
+font_add("Latin Modern Roman 10", regular = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-regular.otf", bold = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bold.otf", italic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-italic.otf", bolditalic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bolditalic.otf")
+font_add("Computer Modern Sans", regular = "C:/Windows/Fonts/CMU Sans Serif/cmunss.ttf", bold = "C:/Windows/Fonts/CMU Sans Serif/cmunsx.ttf", italic = "C:/Windows/Fonts/CMU Sans Serif/cmunsi.ttf")
+showtext_auto()
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+```{r}
+data_all <- read_csv("../data/data_all.csv", 
+                     col_types = cols(
+  country_code = col_character(),
+  country_name = col_character(),
+  regime_type = col_character(),
+  year = col_double(),
+  GDP_PPP = col_double(),
+  GDP_MER = col_double(),
+  material_footprint = col_double(),
+  co2 = col_double(),
+  physical_integrity_rights = col_double(),
+  life_expect = col_double(),
+  equal_distribution = col_double(),
+  population = col_double(),
+  poverty_rate = col_double(),
+  death_rate_malnutrition = col_double(),
+  calorie_availability = col_double(),
+  child_mortality = col_double(),
+  infant_mortality = col_double(),
+  death_rate_sanitation = col_double(),
+  years_schooling = col_double(),
+  former_state = col_character(),
+  electricity_access = col_double(),
+  adolescent_pregnancies = col_double(),
+  doctors = col_double(),
+  female_labour = col_double(),
+  gini_index = col_double(),
+  hospital_beds = col_double(),
+  literacy_rate = col_double(),
+  women_parliament = col_double()
+))
+
+all_countries_considered <- read_csv("../data/all_countries_considered.csv")
+```
+
+
+# Basic needs
+
+## BNPL poverty rate
+build cross-section
+```{r}
+data_MF_poverty <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "poverty_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_poverty, "../data/aggregated_datasets/data_MF_poverty.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_poverty %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_poverty <- lm(poverty_rate ~ regime_type*log(material_footprint),
+                        data = data_MF_poverty)
+vcov_MF_poverty <- vcovHC(model_MF_poverty, type = "HC3")
+
+parameters(model_MF_poverty, vcov = vcov_MF_poverty)
+```
+
+```{r}
+plot(model_MF_poverty)
+```
+strong outlier is Mongolia
+
+
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_poverty, 
+                                vcov = vcov_MF_poverty,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_poverty, 
+          vcov = vcov_MF_poverty,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+
+
+```{r}
+ggintplot(obj = model_MF_poverty, 
+          vcov = vcov_MF_poverty,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_poverty, 
+              vcov = vcov_MF_poverty,
+              pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist", "revolutionary"), data = data_MF_poverty, centered = "all", x.label = "Material footprint", y.label = "Poverty rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = FALSE, rug=TRUE) 
+```
+
+### without Mongolia
+```{r}
+data_MF_poverty_without_Mongolia <- data_MF_poverty %>% filter(country_name != "Mongolia")
+model_MF_poverty_without_Mongolia <- lm(poverty_rate ~ regime_type*log(material_footprint),
+                        data = data_MF_poverty_without_Mongolia)
+vcov_MF_poverty_without_Mongolia <- vcovHC(model_MF_poverty_without_Mongolia, type = "HC3")
+write_csv(data_MF_poverty_without_Mongolia, "../data/aggregated_datasets/data_MF_poverty_without_Mongolia.csv")
+
+parameters(model_MF_poverty_without_Mongolia, vcov = vcov_MF_poverty_without_Mongolia)
+```
+
+```{r}
+summary(model_MF_poverty_without_Mongolia)
+```
+```{r}
+plot(model_MF_poverty_without_Mongolia)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_poverty_without_Mongolia, 
+                                vcov = vcov_MF_poverty_without_Mongolia,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_poverty_without_Mongolia, 
+          vcov = vcov_MF_poverty_without_Mongolia,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_MF_poverty_without_Mongolia, 
+          vcov = vcov_MF_poverty_without_Mongolia,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_poverty_without_Mongolia, 
+              vcov = vcov_MF_poverty_without_Mongolia,
+              pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_poverty_without_Mongolia, centered = "all", x.label = "Material footprint", y.label = "Poverty rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+
+```{r}
+sat_MF_poverty_rate <- - 0.001* data_MF_poverty_without_Mongolia$poverty_rate %>% max()
+
+
+model_MF_poverty_without_Mongolia_sat <- lm(log(poverty_rate - sat_MF_poverty_rate) ~ regime_type*log(material_footprint),
+                        data = data_MF_poverty_without_Mongolia)
+vcov_MF_poverty_without_Mongolia_sat <- vcovHC(model_MF_poverty_without_Mongolia_sat, type = "HC3")
+
+parameters(model_MF_poverty_without_Mongolia_sat, vcov = vcov_MF_poverty_without_Mongolia_sat)
+```
+
+
+```{r}
+summary(model_MF_poverty_without_Mongolia_sat)
+```
+
+
+```{r}
+plot(model_MF_poverty_without_Mongolia_sat)
+```
+
+
+
+```{r}
+summary(model_MF_poverty_without_Mongolia_sat)
+```
+```{r}
+ggintplot(obj = model_MF_poverty_without_Mongolia_sat, 
+          vcov = vcov_MF_poverty_without_Mongolia_sat,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1) + xlim(3,NA)
+```
+
+
+
+```{r}
+interact_plot(model_MF_poverty_without_Mongolia_sat, 
+              vcov = vcov_MF_poverty_without_Mongolia_sat,
+              pred = material_footprint, modx = regime_type, modx.values = c( "capitalist_periphery", "socialist"), data = data_MF_poverty_without_Mongolia, centered = "all", x.label = "Material footprint", #y.label = "Poverty rate", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) #+ coord_trans(y = "exp") + ylim(NA,0.2)
+```
+
+
+
+
+
+## Calorie availability
+
+build cross-section
+```{r}
+data_MF_calories <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "calorie_availability") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_calories, "../data/aggregated_datasets/data_MF_calories.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_calories %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_calories <- lm(calorie_availability ~ regime_type*log(material_footprint),
+                        data = data_MF_calories)
+
+vcov_MF_calories <- vcovHC(model_MF_calories, type = "HC3")
+
+parameters(model_MF_calories, vcov = vcov_MF_calories)
+```
+```{r}
+summary(model_MF_calories)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_calories, 
+                                vcov = vcov_MF_calories,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_calories, 
+                                vcov = vcov_MF_calories, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_calories, 
+                                vcov = vcov_MF_calories, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_calories, 
+                                vcov = vcov_MF_calories, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_calories, centered = "all", x.label = "Material footprint", y.label = "Average calories per person", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_MF_calories <- data_MF_calories$calorie_availability %>% max() * 1.1
+model_MF_calories_sat <- lm(log(sat_MF_calories - calorie_availability) ~ regime_type*log(material_footprint),
+                        data = data_MF_calories)
+vcov_MF_calories_sat <- vcovHC(model_MF_calories_sat, type = "HC3")
+
+summary(model_MF_calories_sat)
+```
+```{r}
+ggintplot(obj = model_MF_calories_sat, 
+                                vcov = vcov_MF_calories_sat, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+```{r}
+interact_plot(model_MF_calories_sat, 
+              vcov = vcov_MF_calories_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_calories, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") #+ ylim(0,4)
+```
+
+## Death rate malnutrition
+build cross-section
+```{r}
+data_MF_malnutrition <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1990, year_outcome = 1990, input_variable = "material_footprint", outcome_variable = "death_rate_malnutrition") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_malnutrition, "../data/aggregated_datasets/data_MF_malnutrition.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_malnutrition %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_malnutrition <- lm(death_rate_malnutrition ~ regime_type*log(material_footprint),
+                        data = data_MF_malnutrition)
+
+vcov_MF_malnutrition <- vcovHC(model_MF_malnutrition, type = "HC3")
+
+parameters(model_MF_malnutrition, vcov = vcov_MF_malnutrition)
+```
+
+```{r}
+summary(model_MF_malnutrition)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_malnutrition, 
+                                vcov = vcov_MF_malnutrition,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_malnutrition, 
+                                vcov = vcov_MF_malnutrition, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_malnutrition, 
+                                vcov = vcov_MF_malnutrition, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_malnutrition, 
+                                vcov = vcov_MF_malnutrition, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_malnutrition, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = FALSE, rug=TRUE) 
+```
+
+### saturation curves
+```{r}
+sat_MF_malnutrition <- (data_MF_malnutrition$death_rate_malnutrition %>% min() * 0.9)
+
+
+model_MF_malnutrition_sat <- lm(log(death_rate_malnutrition - sat_MF_malnutrition) ~ regime_type*log(material_footprint),
+                        data = data_MF_malnutrition)
+
+vcov_MF_malnutrition_sat <- vcovHC(model_MF_malnutrition_sat, type = "HC3")
+
+```
+
+```{r}
+summary(model_MF_malnutrition_sat)
+```
+```{r}
+interact_plot(model_MF_malnutrition_sat, 
+              vcov = vcov_MF_malnutrition_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_malnutrition, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp")
+```
+```{r}
+ggintplot(obj = model_MF_malnutrition_sat, 
+                                vcov = vcov_MF_malnutrition_sat, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+# Health
+
+## Life expectancy
+
+build cross-sectional dataset
+```{r}
+data_MF_life_expect <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "life_expect") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_life_expect, "../data/aggregated_datasets/data_MF_life_expect.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_life_expect %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_life_expect <- lm(life_expect ~ regime_type*log(material_footprint),
+                        data = data_MF_life_expect)
+vcov_MF_life_expect <- vcovHC(model_MF_life_expect, type = "HC3")
+
+parameters(model_MF_life_expect, vcov = vcov_MF_life_expect)
+```
+```{r}
+summary(model_MF_life_expect)
+```
+
+
+```{r}
+plot(model_MF_life_expect)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_life_expect, 
+                                vcov = vcov_MF_life_expect,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_life_expect, 
+          vcov = vcov_MF_life_expect,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_life_expect, 
+          vcov = vcov_MF_life_expect,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_life_expect, 
+              vcov = vcov_MF_life_expect,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_life_expect, centered = "all", x.label = "Material footprint", y.label = "Life expectancy (years)", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51) +
+  geom_vline(aes(xintercept=11.05952))
+```
+
+
+
+### saturation curves
+```{r}
+sat_MF_life_expect <- data_MF_life_expect$life_expect %>% max() * 1.1
+model_MF_life_expect_sat <- lm(log(sat_MF_life_expect - life_expect) ~ regime_type*log(material_footprint), 
+                        data = data_MF_life_expect)
+vcov_MF_life_expect_sat <- vcovHC(model_MF_life_expect_sat, type = "HC3")
+
+parameters(model_MF_life_expect_sat, vcov = vcov_MF_life_expect_sat)
+```
+```{r}
+summary(model_MF_life_expect_sat)
+```
+```{r}
+plot(model_MF_life_expect_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_life_expect_sat, 
+                                vcov = vcov_MF_life_expect_sat,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_life_expect_sat, 
+          vcov = vcov_MF_life_expect_sat,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot(model_MF_life_expect_sat, 
+              vcov = vcov_MF_life_expect_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_life_expect, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") + ylim(0,4)
+```
+
+
+
+
+## Child mortality
+build cross-sectional dataset
+```{r}
+data_MF_child_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "child_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_child_mortality, "../data/aggregated_datasets/data_MF_child_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_child_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+```{r}
+model_MF_child_mortality <- lm(child_mortality ~ regime_type*log(material_footprint),
+                        data = data_MF_child_mortality)
+vcov_MF_child_mortality <- vcovHC(model_MF_child_mortality, type = "HC3")
+
+parameters(model_MF_child_mortality, vcov = vcov_MF_child_mortality)
+```
+
+```{r}
+summary(model_MF_child_mortality)
+```
+
+```{r}
+plot(model_MF_child_mortality)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_child_mortality, 
+                                vcov = vcov_MF_child_mortality,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_child_mortality, 
+          vcov = vcov_MF_child_mortality,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_child_mortality, 
+          vcov = vcov_MF_child_mortality,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_child_mortality, 
+              vcov = vcov_MF_child_mortality,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_child_mortality, centered = "all", x.label = "Material footprint", y.label = "Child mortality", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51) + ylim(NA, 500)
+```
+
+
+### saturation curves
+```{r}
+sat_MF_child_mortality <- (data_MF_child_mortality$child_mortality %>% min() * 0.9)
+
+
+
+model_MF_child_mortality_sat <- lm(log(child_mortality - sat_MF_child_mortality) ~ regime_type*log(material_footprint),
+                        data = data_MF_child_mortality)
+vcov_MF_child_mortality_sat <- vcovHC(model_MF_child_mortality_sat, type = "HC3")
+
+parameters(model_MF_child_mortality_sat, vcov = vcov_MF_child_mortality_sat)
+```
+
+```{r}
+summary(model_MF_child_mortality_sat)
+```
+
+```{r}
+plot(model_MF_child_mortality_sat)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_child_mortality_sat, 
+                                vcov = vcov_MF_child_mortality_sat,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_child_mortality_sat, 
+          vcov = vcov_MF_child_mortality_sat,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_child_mortality_sat, 
+          vcov = vcov_MF_child_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_child_mortality_sat, 
+              vcov = vcov_MF_child_mortality_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_child_mortality, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") #+ ylim(0,4)
+```
+
+
+
+## Infant mortality
+
+build cross-sectional dataset
+```{r}
+data_MF_infant_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "infant_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_infant_mortality, "../data/aggregated_datasets/data_MF_infant_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_infant_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_infant_mortality <- lm(infant_mortality ~ regime_type*log(material_footprint),
+                        data = data_MF_infant_mortality)
+vcov_MF_infant_mortality <- vcovHC(model_MF_infant_mortality, type = "HC3")
+
+parameters(model_MF_infant_mortality, vcov = vcov_MF_infant_mortality)
+```
+
+```{r}
+summary(model_MF_infant_mortality)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_infant_mortality, 
+                                vcov = vcov_MF_infant_mortality,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_infant_mortality, 
+          vcov = vcov_MF_infant_mortality,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_infant_mortality, 
+          vcov = vcov_MF_infant_mortality,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_infant_mortality, 
+              vcov = vcov_MF_infant_mortality,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_infant_mortality, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+
+### saturation curves
+```{r}
+sat_MF_infant_mortality <- (data_MF_infant_mortality$infant_mortality %>% min() * 0.9)
+
+
+model_MF_infant_mortality_sat <- lm(log(infant_mortality - sat_MF_infant_mortality) ~ regime_type*log(material_footprint),
+                        data = data_MF_infant_mortality)
+vcov_MF_infant_mortality_sat <- vcovHC(model_MF_infant_mortality_sat, type = "HC3")
+
+parameters(model_MF_infant_mortality_sat, vcov = vcov_MF_infant_mortality_sat)
+```
+
+```{r}
+summary(model_MF_infant_mortality_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_infant_mortality_sat, 
+                                vcov = vcov_MF_infant_mortality_sat,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_infant_mortality_sat, 
+          vcov = vcov_MF_infant_mortality_sat,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_infant_mortality_sat, 
+          vcov = vcov_MF_infant_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_infant_mortality_sat, 
+              vcov = vcov_MF_infant_mortality_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_infant_mortality, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp")
+```
+
+## Doctors
+build cross-sectional dataset
+```{r}
+data_MF_doctors <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "doctors") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_doctors, "../data/aggregated_datasets/data_MF_doctors.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_doctors %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+```{r}
+model_MF_doctors <- lm(doctors ~ regime_type*log(material_footprint),
+                        data = data_MF_doctors)
+vcov_MF_doctors <- vcovHC(model_MF_doctors, type = "HC3")
+
+parameters(model_MF_doctors, vcov = vcov_MF_doctors)
+```
+
+
+```{r}
+summary(model_MF_doctors)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_doctors, 
+                                vcov = vcov_MF_doctors,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_doctors, 
+          vcov = vcov_MF_doctors,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_doctors, 
+          vcov = vcov_MF_doctors,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_doctors, 
+              vcov = vcov_MF_doctors,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_doctors, centered = "all", x.label = "Material footprint", y.label = "Doctors per person", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50)
+```
+
+### saturation curves
+```{r}
+sat_MF_doctors <- data_MF_doctors$doctors %>% max() * 1.1
+model_MF_doctors_sat <- lm(log(sat_MF_doctors - doctors) ~ regime_type*log(material_footprint),
+                        data = data_MF_doctors)
+vcov_MF_doctors_sat <- vcovHC(model_MF_doctors_sat, type = "HC3")
+
+summary(model_MF_doctors_sat)
+```
+
+--> In the case of doctors, the fit is not better for a saturation curve (tested different saturation levels, does not change the pattern)
+--> This is not surprising given the plot for log curves, which actually shows quite a good fit already
+
+## Hospital beds
+build cross-sectional dataset
+```{r}
+data_MF_hospital_beds <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "hospital_beds") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_hospital_beds, "../data/aggregated_datasets/data_MF_hospital_beds.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_hospital_beds %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+```{r}
+model_MF_hospital_beds <- lm(hospital_beds ~ regime_type*log(material_footprint),
+                        data = data_MF_hospital_beds)
+vcov_MF_hospital_beds <- vcovHC(model_MF_hospital_beds, type = "HC3")
+
+parameters(model_MF_hospital_beds, vcov = vcov_MF_hospital_beds)
+```
+
+
+```{r}
+summary(model_MF_hospital_beds)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_hospital_beds, 
+                                vcov = vcov_MF_hospital_beds,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_hospital_beds, 
+          vcov = vcov_MF_hospital_beds,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_hospital_beds, 
+          vcov = vcov_MF_hospital_beds,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_hospital_beds, 
+              vcov = vcov_MF_hospital_beds,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_hospital_beds, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,51)
+```
+
+
+### saturation curves
+```{r}
+sat_MF_hospital_beds <- data_MF_hospital_beds$hospital_beds %>% max() * 1.1
+model_MF_hospital_beds_sat <- lm(log(sat_MF_hospital_beds - hospital_beds) ~ regime_type*log(material_footprint),
+                        data = data_MF_hospital_beds)
+vcov_MF_hospital_beds_sat <- vcovHC(model_MF_hospital_beds_sat, type = "HC3")
+
+summary(model_MF_hospital_beds_sat)
+```
+--> same as for doctors, fit gets worse
+
+
+
+
+
+# Water
+
+## Death rate poor sanitation
+
+build cross-section
+```{r}
+data_MF_sanitation <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1990, year_outcome = 1990, input_variable = "material_footprint", outcome_variable = "death_rate_sanitation") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_sanitation, "../data/aggregated_datasets/data_MF_sanitation.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_sanitation %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_sanitation <- lm(death_rate_sanitation ~ regime_type*log(material_footprint),
+                        data = data_MF_sanitation)
+
+vcov_MF_sanitation <- vcovHC(model_MF_sanitation, type = "HC3")
+
+parameters(model_MF_sanitation, vcov = vcov_MF_sanitation)
+```
+```{r}
+summary(model_MF_sanitation)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_sanitation, 
+                                vcov = vcov_MF_sanitation,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_MF_sanitation, 
+                                vcov = vcov_MF_sanitation, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_sanitation, 
+                                vcov = vcov_MF_sanitation, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_sanitation, 
+                                vcov = vcov_MF_sanitation, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_sanitation, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = FALSE, rug=TRUE) 
+```
+
+
+### saturation curves
+```{r}
+sat_MF_sanitation <- (data_MF_sanitation$death_rate_sanitation %>% min() * 0.9)
+
+
+model_MF_sanitation_sat <- lm(log(death_rate_sanitation - sat_MF_sanitation) ~
+                                regime_type*log(material_footprint),
+                        data = data_MF_sanitation)
+
+vcov_MF_sanitation_sat <- vcovHC(model_MF_sanitation_sat, type = "HC3")
+
+parameters(model_MF_sanitation_sat, vcov = vcov_MF_sanitation_sat)
+```
+```{r}
+summary(model_MF_sanitation_sat)
+```
+```{r}
+plot(model_MF_sanitation_sat)
+```
+
+
+```{r}
+interact_plot(model_MF_sanitation_sat, 
+                                vcov = vcov_MF_sanitation_sat, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_sanitation, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + coord_trans(y = "exp") + ylim(-1,6) + xlim(NA,50)
+```
+
+# Education
+
+## Schooling
+
+build cross-section
+```{r}
+data_MF_schooling <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "years_schooling") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_schooling, "../data/aggregated_datasets/data_MF_schooling.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_schooling %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_schooling <- lm(years_schooling ~ regime_type*log(material_footprint),
+                        data = data_MF_schooling)
+
+vcov_MF_schooling <- vcovHC(model_MF_schooling, type = "HC3")
+
+parameters(model_MF_schooling, vcov = vcov_MF_schooling)
+```
+
+```{r}
+summary(model_MF_schooling)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_schooling, vcov = vcov_MF_schooling, 
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_schooling, vcov = vcov_MF_schooling, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+
+
+```{r}
+ggintplot(obj = model_MF_schooling, vcov = vcov_MF_schooling, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_schooling, vcov = vcov_MF_schooling, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_schooling, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+
+### saturation curves
+```{r}
+sat_MF_schooling <- data_MF_schooling$years_schooling %>% max() * 1.1
+model_MF_schooling_sat <- lm(log(sat_MF_schooling - years_schooling) ~ regime_type*log(material_footprint), 
+                        data = data_MF_schooling)
+vcov_MF_schooling_sat <- vcovHC(model_MF_schooling_sat, type = "HC3")
+
+parameters(model_MF_schooling_sat, vcov = vcov_MF_schooling_sat)
+```
+```{r}
+summary(model_MF_schooling_sat)
+```
+```{r}
+plot(model_MF_schooling_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_schooling_sat, 
+                                vcov = vcov_MF_schooling_sat,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_schooling_sat, 
+          vcov = vcov_MF_schooling_sat,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot(model_MF_schooling_sat, 
+              vcov = vcov_MF_schooling_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_schooling, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") + ylim(0,2.5)
+```
+
+## Adult literacy
+
+build cross-section
+```{r}
+data_MF_literacy <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "literacy_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_literacy, "../data/aggregated_datasets/data_MF_literacy.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_literacy %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_literacy <- lm(literacy_rate ~ regime_type*log(material_footprint),
+                        data = data_MF_literacy)
+
+vcov_MF_literacy <- vcovHC(model_MF_literacy, type = "HC3")
+
+parameters(model_MF_literacy, vcov = vcov_MF_literacy)
+```
+
+```{r}
+summary(model_MF_literacy)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_literacy, vcov = vcov_MF_literacy, 
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_literacy, vcov = vcov_MF_literacy, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_MF_literacy, vcov = vcov_MF_literacy, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot(model_MF_literacy, vcov = vcov_MF_literacy, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_literacy, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51) + ylim(NA, 120)
+```
+
+### saturation curves
+
+```{r}
+sat_MF_literacy <- 100.1
+
+model_MF_literacy_sat <- lm(log(sat_MF_literacy-literacy_rate) ~ regime_type*log(material_footprint),
+                        data = data_MF_literacy)
+
+vcov_MF_literacy_sat <- vcovHC(model_MF_literacy_sat, type = "HC3")
+
+summary(model_MF_literacy_sat)
+```
+
+```{r}
+interact_plot(model_MF_literacy_sat, 
+              vcov = vcov_MF_literacy_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_literacy, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(0,50) + coord_trans(y = "exp") + ylim(-3,5)
+```
+
+```{r}
+ggintplot(obj = model_MF_literacy_sat, vcov = vcov_MF_literacy_sat, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+```{r}
+significant_ranges(obj = model_MF_literacy_sat, 
+                                              vcov = vcov_MF_literacy_sat,
+                                              varnames = c("regime_typesocialist", 
+                                                           "log(material_footprint)"),
+                                              find_insignificant = TRUE) %>% lapply(exp)
+```
+
+
+
+
+# Energy
+
+## Access to electricity
+
+build cross-section
+```{r}
+data_MF_electricity <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1990, year_outcome = 1990, input_variable = "material_footprint", outcome_variable = "electricity_access") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_electricity, "../data/aggregated_datasets/data_MF_electricity.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_electricity %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_electricity <- lm(electricity_access ~ regime_type*log(material_footprint),
+                        data = data_MF_electricity) 
+
+vcov_MF_electricity <- vcovHC(model_MF_electricity, type = "HC3")
+
+parameters(model_MF_electricity, vcov = vcov_MF_electricity)
+```
+
+```{r}
+plot(model_MF_electricity)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_electricity, 
+                                vcov = vcov_MF_electricity,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_electricity, 
+                                vcov = vcov_MF_electricity, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_electricity, 
+                                vcov = vcov_MF_electricity, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_electricity, 
+                                vcov = vcov_MF_electricity, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_electricity, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51) + ylim(NA, 150)
+```
+
+### without North Korea
+```{r}
+data_MF_electricity_without_North_Korea <- data_MF_electricity %>% filter(country_name!="North Korea")
+write_csv(data_MF_electricity_without_North_Korea, "../data/aggregated_datasets/data_MF_electricity_without_North_Korea.csv")
+
+model_MF_electricity_without_North_Korea <- lm(electricity_access ~ regime_type*log(material_footprint),
+                        data = data_MF_electricity_without_North_Korea)
+
+vcov_MF_electricity_without_North_Korea <- vcovHC(model_MF_electricity_without_North_Korea, type = "HC3")
+
+parameters(model_MF_electricity_without_North_Korea, vcov = vcov_MF_electricity_without_North_Korea)
+```
+```{r}
+summary(model_MF_electricity_without_North_Korea)
+```
+
+
+```{r}
+plot(model_MF_electricity_without_North_Korea)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_electricity_without_North_Korea, 
+                                vcov = vcov_MF_electricity_without_North_Korea,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_electricity_without_North_Korea, 
+                                vcov = vcov_MF_electricity_without_North_Korea, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_electricity_without_North_Korea, 
+                                vcov = vcov_MF_electricity_without_North_Korea, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_electricity_without_North_Korea, 
+                                vcov = vcov_MF_electricity_without_North_Korea, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_electricity, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51) + ylim(0, 150)
+```
+
+### saturation curves
+```{r}
+
+sat_MF_electricity <- 100.1
+
+model_MF_electricity_without_North_Korea_sat <- lm(log(sat_MF_electricity-electricity_access) ~ regime_type*log(material_footprint),
+                        data = data_MF_electricity_without_North_Korea)
+
+vcov_MF_electricity_without_North_Korea_sat <- vcovHC(model_MF_electricity_without_North_Korea_sat, type = "HC3")
+
+summary(model_MF_electricity_without_North_Korea_sat)
+```
+
+```{r}
+ggintplot(obj = model_MF_electricity_without_North_Korea_sat, 
+                                vcov = vcov_MF_electricity_without_North_Korea_sat, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+interact_plot(model_MF_electricity_without_North_Korea_sat, 
+              vcov = vcov_MF_electricity_without_North_Korea_sat,
+              pred = material_footprint, modx = regime_type, 
+              modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), 
+              data = data_MF_electricity, centered = "all", x.label = "Material footprint", 
+              robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(1.7,50) #+ coord_trans(y = "exp") + ylim(-4,5)
+```
+
+
+
+
+# Social equity
+
+## Gini index 
+
+build cross-section
+```{r}
+data_MF_gini <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "gini_index") %>% 
+  mutate(gini_index = # fill missing values for certain socialist countries with next year available
+           case_match(
+             country_name,
+             "Poland"  ~ 
+               data_all %>% 
+               filter(country_name == "Poland", year == 1983) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Bulgaria" ~
+               data_all %>% 
+               filter(country_name == "Bulgaria", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Romania" ~
+               data_all %>% 
+               filter(country_name == "Romania", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             .default = gini_index)
+         ) %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na() %>% 
+  filter(regime_type != "revolutionary")
+write_csv(data_MF_gini, "../data/aggregated_datasets/data_MF_gini.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_gini %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_gini <- lm(gini_index ~ regime_type*log(material_footprint),
+                        data = data_MF_gini)
+
+vcov_MF_gini <- vcovHC(model_MF_gini, type = "HC3")
+
+parameters(model_MF_gini, vcov = vcov_MF_gini)
+```
+```{r}
+summary(model_MF_gini)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_gini, 
+                                vcov = vcov_MF_gini,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_gini, 
+                                vcov = vcov_MF_gini, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_gini, 
+                                vcov = vcov_MF_gini, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_gini, 
+                                vcov = vcov_MF_gini, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_gini, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) +
+   xlim(NA, 51)  
+```
+
+## Social services quality
+
+build cross-sectional dataset
+
+```{r}
+data_MF_social_services <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "social_services") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_social_services, "../data/aggregated_datasets/data_MF_social_services.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_social_services %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_MF_social_services <- lm(social_services ~ regime_type*log(material_footprint), 
+                        data = data_MF_social_services)
+vcov_MF_social_services <- vcovHC(model_MF_social_services, type = "HC3")
+
+parameters(model_MF_social_services, vcov = vcov_MF_social_services)
+```
+
+```{r}
+summary(model_MF_social_services)
+```
+
+
+
+### saturation curves
+```{r}
+sat_MF_social_services <- 1
+model_MF_social_services_sat <- lm(log(sat_MF_social_services - social_services) ~ regime_type*log(material_footprint),
+                        data = data_MF_social_services)
+vcov_MF_social_services_sat <- vcovHC(model_MF_social_services_sat, type = "HC3")
+
+summary(model_MF_social_services_sat)
+```
+```{r}
+interact_plot_custom(model_MF_social_services_sat, 
+              vcov = vcov_MF_social_services_sat,
+              saturation_level = sat_MF_social_services,
+              pred = "material_footprint",
+              resp = "social_services",
+              data = data_MF_social_services, insignificant_lines = "dashed", x.label = "Material footprint", y.label = "Equal resource distriution index", 
+              ) 
+```
+
+
+
+# Gender equality
+
+## Women in parliament 
+
+build cross-section
+```{r}
+data_MF_women_parliament <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "women_parliament") %>% 
+  as.data.frame() %>% 
+  {mutate(.,women_parliament= case_match(
+    .$country_name, 
+    "USSR" ~ .[which(.$former_state == "USSR"), "women_parliament"][1],
+    "Czechoslovakia" ~ .[which(.$former_state == "CSK"), "women_parliament"][1],
+    "Yugoslavia" ~ .[which(.$former_state == "Yugo"), "women_parliament"][1],
+    .default = .$women_parliament))} %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_women_parliament, "../data/aggregated_datasets/data_MF_women_parliament.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_women_parliament %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_women_parliament <- lm(women_parliament ~ regime_type*log(material_footprint),
+                        data = data_MF_women_parliament)
+
+vcov_MF_women_parliament <- vcovHC(model_MF_women_parliament, type = "HC3")
+
+parameters(model_MF_women_parliament, vcov = vcov_MF_women_parliament)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_women_parliament, 
+                                vcov = vcov_MF_women_parliament,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_women_parliament, 
+                                vcov = vcov_MF_women_parliament, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_women_parliament, 
+                                vcov = vcov_MF_women_parliament, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_women_parliament, 
+                                vcov = vcov_MF_women_parliament, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_women_parliament, centered = "all", x.label = "Material footprint", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) 
+```
+
+
+
+## Female labor force participation
+
+build cross-section
+```{r}
+data_MF_female_labour <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1990, year_outcome = 1990, input_variable = "material_footprint", outcome_variable = "female_labour") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_female_labour, "../data/aggregated_datasets/data_MF_female_labour.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_female_labour %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_female_labour <- lm(female_labour ~ regime_type*log(material_footprint),
+                        data = data_MF_female_labour)
+
+vcov_MF_female_labour <- vcovHC(model_MF_female_labour, type = "HC3")
+
+parameters(model_MF_female_labour, vcov = vcov_MF_female_labour)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_female_labour, 
+                                vcov = vcov_MF_female_labour,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_female_labour, 
+                                vcov = vcov_MF_female_labour, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_female_labour, 
+                                vcov = vcov_MF_female_labour, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_female_labour, 
+                                vcov = vcov_MF_female_labour, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_female_labour, centered = "all", x.label = "Material footprint", y.label = "Female labour force participation", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51)
+```
+
+```{r}
+interact_plot_custom(model = model_MF_female_labour, vcov = vcov_MF_female_labour, data = data_MF_female_labour, pred = "material_footprint", resp = "female_labour", y.label = "Female labour force participation", percentage = TRUE, reverse = FALSE, y_max = NA, trans_x = "log10")
+```
+
+## Female labour income share
+
+build cross-sectional dataset
+
+```{r}
+data_MF_female_labour_income <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1991, year_outcome = 1991, input_variable = "material_footprint", outcome_variable = "female_labour_income") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_female_labour_income, "../data/aggregated_datasets/data_MF_female_labour_income.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_female_labour_income %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_MF_female_labour_income <- lm(female_labour_income ~ regime_type*log(material_footprint), 
+                        data = data_MF_female_labour_income)
+vcov_MF_female_labour_income <- vcovHC(model_MF_female_labour_income, type = "HC3")
+
+parameters(model_MF_female_labour_income, vcov = vcov_MF_female_labour_income)
+```
+
+```{r}
+summary(model_MF_female_labour_income)
+```
+
+
+```{r}
+plot(model_MF_female_labour_income)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_female_labour_income, 
+                                vcov = vcov_MF_female_labour_income,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_MF_female_labour_income, 
+          vcov = vcov_MF_female_labour_income,
+          varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Matreial footrpint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_MF_female_labour_income, 
+          vcov = vcov_MF_female_labour_income,
+          varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_MF_female_labour_income, 
+              vcov = vcov_MF_female_labour_income,
+              pred = "material_footprint",
+              
+              data = data_MF_female_labour_income, insignificant_lines = "dashed", x.label = "Material footprint", y.label = "Female labour income share", 
+              ) 
+```
+
+
+
+
+## Adolescent fertility rate
+build cross-section
+```{r}
+data_MF_adolescent_pregnancies <- 
+  data_all %>% 
+  cross_section(start_average = 1970, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "adolescent_pregnancies") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_adolescent_pregnancies, "../data/aggregated_datasets/data_MF_adolescent_pregnancies.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_adolescent_pregnancies %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+```{r}
+model_MF_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type*log(material_footprint),
+                        data = data_MF_adolescent_pregnancies)
+
+vcov_MF_adolescent_pregnancies <- vcovHC(model_MF_adolescent_pregnancies, type = "HC3")
+
+parameters(model_MF_adolescent_pregnancies, vcov = vcov_MF_adolescent_pregnancies)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_MF_adolescent_pregnancies, 
+                                vcov = vcov_MF_adolescent_pregnancies,
+                                pred = "log(material_footprint)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_MF_adolescent_pregnancies, 
+                                vcov = vcov_MF_adolescent_pregnancies, varnames = c("regime_typesocialist", "log(material_footprint)"), varlabs=c("socialist regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_MF_adolescent_pregnancies, 
+                                vcov = vcov_MF_adolescent_pregnancies, varnames = c("regime_typecapitalist_core", "log(material_footprint)"), varlabs=c("capitalist core regime type", "Material footprint"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot(model_MF_adolescent_pregnancies, 
+                                vcov = vcov_MF_adolescent_pregnancies, pred = material_footprint, modx = regime_type, modx.values = c("capitalist_core", "capitalist_periphery", "socialist"), data = data_MF_adolescent_pregnancies, centered = "all", x.label = "Material footprint", y.label = "Adolescent pregnancy rate", robust = TRUE, plot.points = TRUE, point.shape = FALSE, point.size = 2, interval = TRUE, rug=TRUE) + xlim(NA, 51)
+```
+
+
+# Political voice
+## Physical integrity rights index
+
+
+
+build cross-sectional dataset
+
+```{r}
+data_MF_physical_integrity_rights <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, input_variable = "material_footprint", outcome_variable = "physical_integrity_rights") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_MF_physical_integrity_rights, "../data/aggregated_datasets/data_MF_physical_integrity_rights.csv")
+
+writeLines("\nSocialist countries included:")
+data_MF_physical_integrity_rights %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_MF_physical_integrity_rights <- lm(physical_integrity_rights ~ regime_type*log(material_footprint), 
+                        data = data_MF_physical_integrity_rights)
+vcov_MF_physical_integrity_rights <- vcovHC(model_MF_physical_integrity_rights, type = "HC3")
+
+parameters(model_MF_physical_integrity_rights, vcov = vcov_MF_physical_integrity_rights)
+```
+
+```{r}
+summary(model_MF_physical_integrity_rights)
+```
+
+
+
+
+### saturation curves
+```{r}
+sat_MF_physical_integrity_rights <- 1
+model_MF_physical_integrity_rights_sat <- lm(log(sat_MF_physical_integrity_rights - physical_integrity_rights) ~ regime_type*log(material_footprint),
+                        data = data_MF_physical_integrity_rights)
+vcov_MF_physical_integrity_rights_sat <- vcovHC(model_MF_physical_integrity_rights_sat, type = "HC3")
+
+summary(model_MF_physical_integrity_rights_sat)
+```
+```{r}
+interact_plot_custom(model_MF_physical_integrity_rights_sat, 
+              vcov = vcov_MF_physical_integrity_rights_sat,
+              saturation_level = sat_MF_physical_integrity_rights,
+              pred = "material_footprint",
+              resp = "physical_integrity_rights",
+              data = data_MF_physical_integrity_rights, insignificant_lines = "dashed", x.label = "Material footprint", y.label = "Physical integrity rights index", 
+              ) 
+```
+
+
+
+
+
+# Trellis
+
+```{r}
+argument_list_MF <- list(pred = "material_footprint", x.label = "Material footprint (tons per capita)", x_max = 36, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed", physical_boundary = 9.445549)
+```
+
+
+## Selection main part 
+
+```{r}
+
+
+interact_plot_poverty_without_Mongolia <- do.call(interact_plot_custom, c(list(model_MF_poverty_without_Mongolia_sat, vcov_MF_poverty_without_Mongolia_sat, data_MF_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, saturation_level = sat_MF_poverty_rate, resp = "poverty_rate", y_max = 100), argument_list_MF))
+
+
+
+interact_plot_life_expect <- do.call(interact_plot_custom, c(list(model_MF_life_expect_sat, vcov_MF_life_expect_sat, data_MF_life_expect,  y.label = "Life expectancy (years)", 
+                                                                  resp = "life_expect",
+                                                                  saturation_level = sat_MF_life_expect,
+                                                                  y_max = 80), argument_list_MF))
+
+
+interact_plot_sanitation <- do.call(interact_plot_custom, c(list(model_MF_sanitation_sat, vcov_MF_sanitation_sat, data_MF_sanitation, y.label = "Poor sanitation death rate", reverse = TRUE, res = "death_rate_sanitation", saturation_level = sat_MF_sanitation, y_max = 0.4, percentage = TRUE), argument_list_MF))
+
+
+interact_plot_schooling <- do.call(interact_plot_custom, c(list(model_MF_schooling_sat, vcov_MF_schooling_sat, data_MF_schooling, y.label = "Years of schooling", resp = "years_schooling", saturation_level = sat_MF_schooling), argument_list_MF))
+
+interact_plot_electricity <- do.call(interact_plot_custom, c(list(model_MF_electricity_without_North_Korea_sat, vcov_MF_electricity_without_North_Korea_sat, data_MF_electricity_without_North_Korea, y.label = "Access to electricity", y_max = 100, resp = "electricity_access", saturation_level = sat_MF_electricity, percentage = TRUE), argument_list_MF))
+                                     
+
+
+
+interact_plot_gini <- do.call(interact_plot_custom, c(list(model_MF_gini, vcov_MF_gini, data_MF_gini, y.label = "Gini index", reverse = TRUE), argument_list_MF))
+
+interact_plot_women_parliament <- do.call(interact_plot_custom, c(list(model_MF_women_parliament, vcov_MF_women_parliament, data_MF_women_parliament, y.label = "Female parliament members", percentage = TRUE), argument_list_MF))
+
+
+interact_plot_physical_integrity_rights <- do.call(interact_plot_custom, c(list(model_MF_physical_integrity_rights_sat, vcov_MF_physical_integrity_rights_sat, data_MF_physical_integrity_rights,  y.label = "Physical integrity rights index", 
+                                                                  resp = "physical_integrity_rights",
+                                                                  saturation_level = sat_MF_physical_integrity_rights), argument_list_MF))
+
+
+
+```
+
+```{r}
+
+ggarrange(
+  interact_plot_poverty_without_Mongolia + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_life_expect + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_sanitation + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_schooling + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_electricity + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_gini + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_women_parliament,
+  interact_plot_physical_integrity_rights,
+  nrow = 4, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_MF_main_part.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+```
+
+
+## Rest of indicators
+```{r}
+
+
+interact_plot_calories <- do.call(interact_plot_custom, c(list(model_MF_calories, vcov_MF_calories, data_MF_calories, y.label = "Calories per person", resp = "calorie_availability"), argument_list_MF))
+
+interact_plot_malnutrition <- do.call(interact_plot_custom, c(list(model_MF_malnutrition_sat, vcov_MF_malnutrition_sat, data_MF_malnutrition, y.label = "Malnutrition death rate", reverse = TRUE, ignore_significance_right = FALSE, percentage = TRUE, resp = "death_rate_malnutrition", saturation_level = sat_MF_malnutrition), argument_list_MF))
+
+
+
+interact_plot_child_mortality <- do.call(interact_plot_custom, c(list(model_MF_child_mortality_sat, vcov_MF_child_mortality_sat, data_MF_child_mortality, y.label = "Child mortality rate", reverse = TRUE, percentage = TRUE, resp = "child_mortality", saturation_level = sat_MF_child_mortality), argument_list_MF))
+
+interact_plot_infant_mortality <- do.call(interact_plot_custom, c(list(model_MF_infant_mortality_sat, vcov_MF_infant_mortality_sat, data_MF_infant_mortality, y.label = "Infant mortality rate", reverse = TRUE, percentage = TRUE, resp = "infant_mortality", saturation_level = sat_MF_infant_mortality), argument_list_MF))
+
+interact_plot_doctors <- do.call(interact_plot_custom, c(list(model_MF_doctors, vcov_MF_doctors, data_MF_doctors, y.label = "Doctors per 1000 people"), argument_list_MF))
+
+interact_plot_hospital_beds <- do.call(interact_plot_custom, c(list(model_MF_hospital_beds, vcov_MF_hospital_beds, data_MF_hospital_beds, y.label = "Hospital beds per 1000 people"), argument_list_MF))
+
+
+interact_plot_literacy <- do.call(interact_plot_custom, c(list(model_MF_literacy_sat, vcov_MF_literacy_sat, data_MF_literacy, y.label = "Adult literacy", y_max = 100, percentage = TRUE, resp = "literacy_rate", sat_MF_literacy), argument_list_MF))
+
+interact_plot_social_services <- do.call(interact_plot_custom, c(list(model_MF_social_services_sat, vcov_MF_social_services_sat, data_MF_social_services, y.label = "Social services quality",  resp = "social_services", sat_MF_social_services), argument_list_MF))
+
+
+interact_plot_female_labour <- do.call(interact_plot_custom, c(list(model_MF_female_labour, vcov_MF_female_labour, data_MF_female_labour, y.label = "Female labour force participation", percentage = TRUE), argument_list_MF))
+
+interact_plot_female_labour_income <- do.call(interact_plot_custom, c(list(model_MF_female_labour_income, vcov_MF_female_labour_income, data_MF_female_labour_income, y.label = "Female labour income share", percentage = TRUE), argument_list_MF))
+
+
+interact_plot_adolescent_pregnancies <- do.call(interact_plot_custom, c(list(model_MF_adolescent_pregnancies, vcov_MF_adolescent_pregnancies, data_MF_adolescent_pregnancies, y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE), argument_list_MF))
+```
+
+```{r}
+
+ggarrange(
+  interact_plot_calories + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_malnutrition + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_child_mortality + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_infant_mortality + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_doctors,
+  interact_plot_hospital_beds, 
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_MF_extended_data_1.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+
+
+
+ggarrange(
+  interact_plot_literacy + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_social_services + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_female_labour +
+    theme(axis.title.x = element_blank()),
+  interact_plot_female_labour_income,
+  interact_plot_adolescent_pregnancies,
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_MF_extended_data_2.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+```
+
+
+
+# SuppInf 
+
+```{r}
+
+generate_supplementary_information(model = model_MF_life_expect, vcov = vcov_MF_life_expect, model_sat = model_MF_life_expect_sat, vcov_sat = vcov_MF_life_expect_sat, data = data_MF_life_expect, pred = "material_footprint", resp = "life_expect", y.label = "Life expectancy (years)", percentage = FALSE, reverse = FALSE, sat = sat_MF_life_expect, y_max = NA)
+
+
+
+generate_supplementary_information(model = model_MF_child_mortality, vcov = vcov_MF_child_mortality, model_sat = model_MF_child_mortality_sat, vcov_sat = vcov_MF_child_mortality_sat, data = data_MF_child_mortality, pred = "material_footprint", resp = "child_mortality", y.label = "Child mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_MF_child_mortality, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_MF_infant_mortality, vcov = vcov_MF_infant_mortality, model_sat = model_MF_infant_mortality_sat, vcov_sat = vcov_MF_infant_mortality_sat, data = data_MF_infant_mortality, pred = "material_footprint", resp = "infant_mortality", y.label = "Infant mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_MF_infant_mortality, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_MF_doctors, vcov = vcov_MF_doctors, model_sat = model_MF_doctors_sat, vcov_sat = vcov_MF_doctors_sat, data = data_MF_doctors, pred = "material_footprint", resp = "doctors", y.label = "Doctors per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_MF_doctors, y_max = NA)
+
+generate_supplementary_information(model = model_MF_hospital_beds, vcov = vcov_MF_hospital_beds, model_sat = model_MF_hospital_beds_sat, vcov_sat = vcov_MF_hospital_beds_sat, data = data_MF_hospital_beds, pred = "material_footprint", resp = "hospital_beds", y.label = "Hospital beds per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_MF_hospital_beds, y_max = NA)
+
+generate_supplementary_information(model = model_MF_poverty_without_Mongolia, vcov = vcov_MF_poverty_without_Mongolia, model_sat = model_MF_poverty_without_Mongolia_sat, vcov_sat = vcov_MF_poverty_without_Mongolia_sat, data = data_MF_poverty_without_Mongolia, pred = "material_footprint", resp = "poverty_rate", y.label = "Basic needs poverty rate", percentage = TRUE, reverse = TRUE, sat = sat_MF_poverty_rate, y_max = 100, y_min = 0)
+
+generate_supplementary_information(model = model_MF_calories, vcov = vcov_MF_calories, model_sat = model_MF_calories_sat, vcov_sat = vcov_MF_calories_sat, data = data_MF_calories, pred = "material_footprint", resp = "calorie_availability", y.label = "Calories per person", percentage = FALSE, reverse = FALSE, sat = sat_MF_calories, y_max = NA)
+
+generate_supplementary_information(model = model_MF_malnutrition, vcov = vcov_MF_malnutrition, model_sat = model_MF_malnutrition_sat, vcov_sat = vcov_MF_malnutrition_sat, data = data_MF_malnutrition, pred = "material_footprint", resp = "death_rate_malnutrition", y.label = "Malnutrition death rate", percentage = TRUE, reverse = TRUE, sat = sat_MF_malnutrition, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_MF_schooling, vcov = vcov_MF_schooling, model_sat = model_MF_schooling_sat, vcov_sat = vcov_MF_schooling_sat, data = data_MF_schooling, pred = "material_footprint", resp = "years_schooling", y.label = "Years of schooling", percentage = FALSE, reverse = FALSE, sat = sat_MF_schooling, y_max = NA)
+
+generate_supplementary_information(model = model_MF_literacy, vcov = vcov_MF_literacy, model_sat = model_MF_literacy_sat, vcov_sat = vcov_MF_literacy_sat, data = data_MF_literacy, pred = "material_footprint", resp = "literacy_rate", y.label = "Adult literacy", percentage = TRUE, reverse = FALSE, sat = sat_MF_literacy, y_max = 100)
+
+
+generate_supplementary_information(model = model_MF_sanitation, vcov = vcov_MF_sanitation, model_sat = model_MF_sanitation_sat, vcov_sat = vcov_MF_sanitation_sat, data = data_MF_sanitation, pred = "material_footprint", resp = "death_rate_sanitation", y.label = "Poor sanitation death rate", percentage = TRUE, reverse = TRUE, sat = sat_MF_sanitation, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_MF_electricity_without_North_Korea, vcov = vcov_MF_electricity_without_North_Korea, model_sat = model_MF_electricity_without_North_Korea_sat, vcov_sat = vcov_MF_electricity_without_North_Korea_sat, data = data_MF_electricity_without_North_Korea, pred = "material_footprint", resp = "electricity_access", y.label = "Access to electricity", percentage = TRUE, reverse = FALSE, sat = sat_MF_electricity, y_max = 100)
+
+generate_supplementary_information(model = model_MF_physical_integrity_rights, vcov = vcov_MF_physical_integrity_rights, model_sat = model_MF_physical_integrity_rights_sat, vcov_sat = vcov_MF_physical_integrity_rights_sat, data = data_MF_physical_integrity_rights, pred = "material_footprint", resp = "physical_integrity_rights", y.label = "Physical integrity rights index", percentage = FALSE, reverse = FALSE, sat = sat_MF_physical_integrity_rights, y_max = 1)
+
+generate_supplementary_information(model_MF_gini, vcov_MF_gini, data = data_MF_gini, pred = "material_footprint", resp = "gini_index", y.label = "Gini index", percentage = FALSE, reverse = TRUE, y_max = NA)
+
+generate_supplementary_information(model = model_MF_social_services, vcov = vcov_MF_social_services, model_sat = model_MF_social_services_sat, vcov_sat = vcov_MF_social_services_sat, data = data_MF_social_services, pred = "material_footprint", resp = "social_services", y.label = "Social services quality", percentage = FALSE, reverse = FALSE, sat = sat_MF_social_services, y_max = 1)
+
+
+generate_supplementary_information(model = model_MF_women_parliament, vcov = vcov_MF_women_parliament, data = data_MF_women_parliament, pred = "material_footprint", resp = "women_parliament", y.label = "Female parliament members", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_MF_female_labour, vcov = vcov_MF_female_labour, data = data_MF_female_labour, pred = "material_footprint", resp = "female_labour", y.label = "Female labour force participation", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_MF_female_labour_income, vcov = vcov_MF_female_labour_income, data = data_MF_female_labour_income, pred = "material_footprint", resp = "female_labour_income", y.label = "Female labour income share", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_MF_adolescent_pregnancies, vcov = vcov_MF_adolescent_pregnancies, data = data_MF_adolescent_pregnancies, pred = "material_footprint", resp = "adolescent_pregnancies", y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE, y_max = NA)
+
+```

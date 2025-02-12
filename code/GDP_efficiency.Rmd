@@ -1,0 +1,2626 @@
+---
+title: "GDP efficiency"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Preparations
+
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)
+library(tidyverse)
+library(countrycode)
+library(readr)
+library(sandwich)
+library(parameters)
+#library(interactions)
+library(stargazer)
+library(ggplot2)
+library(ggpubr)
+library(knitr) 
+library(scales)
+library(rlang)
+library(jtools)
+library(colorspace)
+
+
+source("local_config.R")
+source(PATH_HELPER_FUNCTIONS)
+source("helper_functions_ecological_efficiency.R")
+
+library(showtext)
+font_add("Latin Modern Roman 10", regular = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-regular.otf", bold = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bold.otf", italic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-italic.otf", bolditalic = "C:/Windows/Fonts/Latin Modern Roman 10/lmroman10-bolditalic.otf")
+font_add("Computer Modern Sans", regular = "C:/Windows/Fonts/CMU Sans Serif/cmunss.ttf", bold = "C:/Windows/Fonts/CMU Sans Serif/cmunsx.ttf", italic = "C:/Windows/Fonts/CMU Sans Serif/cmunsi.ttf")
+showtext_auto()
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+data_all <- read_csv("../data/data_all.csv", 
+                     col_types = cols(
+  country_code = col_character(),
+  country_name = col_character(),
+  regime_type = col_character(),
+  year = col_double(),
+  GDP_PPP = col_double(),
+  GDP_MER = col_double(),
+  material_footprint = col_double(),
+  co2 = col_double(),
+  physical_integrity_rights = col_double(),
+  life_expect = col_double(),
+  equal_distribution = col_double(),
+  population = col_double(),
+  poverty_rate = col_double(),
+  death_rate_malnutrition = col_double(),
+  calorie_availability = col_double(),
+  child_mortality = col_double(),
+  infant_mortality = col_double(),
+  death_rate_sanitation = col_double(),
+  years_schooling = col_double(),
+  former_state = col_character(),
+  electricity_access = col_double(),
+  adolescent_pregnancies = col_double(),
+  doctors = col_double(),
+  female_labour = col_double(),
+  gini_index = col_double(),
+  hospital_beds = col_double(),
+  literacy_rate = col_double(),
+  women_parliament = col_double()
+))
+
+all_countries_considered <- read_csv("../data/all_countries_considered.csv")
+```
+
+
+# Basic needs
+## BNPL poverty rate
+
+build cross-section
+
+```{r}
+data_GDP_poverty <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "poverty_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_poverty, "../data/aggregated_datasets/data_GDP_poverty.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_poverty %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_poverty <- lm(poverty_rate ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_poverty)
+vcov_GDP_poverty <- vcovHC(model_GDP_poverty, type = "HC3")
+
+parameters(model_GDP_poverty, vcov = vcov_GDP_poverty)
+```
+
+```{r}
+plot(model_GDP_poverty)
+```
+
+strong outlier is Mongolia
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_poverty, 
+                                vcov = vcov_GDP_poverty,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_poverty, 
+          vcov = vcov_GDP_poverty,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_poverty, 
+          vcov = vcov_GDP_poverty,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+
+interact_plot_custom(model_GDP_poverty, vcov_GDP_poverty, data_GDP_poverty, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE,  resp = "poverty_rate", y_max = 100, pred = "GDP_PPP", x.label = "GDP ($ per capita)", x_max = 20000, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed")
+
+```
+
+
+
+
+
+### without Mongolia
+
+```{r}
+data_GDP_poverty_without_Mongolia <- data_GDP_poverty %>% filter(country_name != "Mongolia")
+model_GDP_poverty_without_Mongolia <- lm(poverty_rate ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_poverty_without_Mongolia)
+vcov_GDP_poverty_without_Mongolia <- vcovHC(model_GDP_poverty_without_Mongolia, type = "HC3")
+write_csv(data_GDP_poverty_without_Mongolia, "../data/aggregated_datasets/data_GDP_poverty_without_Mongolia.csv")
+
+parameters(model_GDP_poverty_without_Mongolia, vcov = vcov_GDP_poverty_without_Mongolia)
+```
+```{r}
+summary(model_GDP_poverty_without_Mongolia)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_poverty_without_Mongolia, 
+                                vcov = vcov_GDP_poverty_without_Mongolia,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_poverty_without_Mongolia, 
+          vcov = vcov_GDP_poverty_without_Mongolia,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_poverty_without_Mongolia, 
+          vcov = vcov_GDP_poverty_without_Mongolia,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_poverty_without_Mongolia, vcov_GDP_poverty_without_Mongolia, data_GDP_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, resp = "poverty_rate", y_max = 100, pred = "GDP_PPP", x.label = "GDP ($ per capita)", x_max = 20000, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed")
+```
+
+### saturation curves
+```{r}
+sat_GDP_poverty_rate <- - 0.001* data_GDP_poverty_without_Mongolia$poverty_rate %>% max()
+
+model_GDP_poverty_without_Mongolia_sat <- lm(log(poverty_rate - sat_GDP_poverty_rate) ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_poverty_without_Mongolia)
+vcov_GDP_poverty_without_Mongolia_sat <- vcovHC(model_GDP_poverty_without_Mongolia_sat, type = "HC3")
+
+summary(model_GDP_poverty_without_Mongolia_sat)
+```
+
+```{r}
+plot(model_GDP_poverty_without_Mongolia_sat)
+```
+```{r}
+ggintplot(obj = model_GDP_poverty_without_Mongolia_sat, 
+          vcov = vcov_GDP_poverty_without_Mongolia_sat,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot_custom(model_GDP_poverty_without_Mongolia_sat, vcov_GDP_poverty_without_Mongolia_sat, data_GDP_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, saturation_level = sat_GDP_poverty_rate, resp = "poverty_rate", y_max = 100, pred = "GDP_PPP", x.label = "GDP ($ per capita)", x_max = 20000, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed") 
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_poverty_without_Mongolia_sat, 
+                                vcov = vcov_GDP_poverty_without_Mongolia_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+## Calorie availability
+
+build cross-section
+
+```{r}
+data_GDP_calories <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "calorie_availability") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_calories, "../data/aggregated_datasets/data_GDP_calories.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_calories %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_calories <- lm(calorie_availability ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_calories)
+
+vcov_GDP_calories <- vcovHC(model_GDP_calories, type = "HC3")
+
+parameters(model_GDP_calories, vcov = vcov_GDP_calories)
+```
+
+```{r}
+summary(model_GDP_calories)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_calories, 
+                                vcov = vcov_GDP_calories,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_calories, 
+                                vcov = vcov_GDP_calories, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_calories, 
+                                vcov = vcov_GDP_calories, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_calories, 
+                                vcov = vcov_GDP_calories, pred = "GDP_PPP",data = data_GDP_calories, insignificant_lines = "dashed", x.label = "GDP (PPP)", ) 
+```
+
+
+
+### saturation curves
+```{r}
+sat_GDP_calories <- data_GDP_calories$calorie_availability %>% max() * 1.1
+model_GDP_calories_sat <- lm(log(sat_GDP_calories - calorie_availability) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_calories)
+vcov_GDP_calories_sat <- vcovHC(model_GDP_calories_sat, type = "HC3")
+
+summary(model_GDP_calories_sat)
+```
+```{r}
+ggintplot(obj = model_GDP_calories_sat, 
+                                vcov = vcov_GDP_calories_sat, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+```{r}
+interact_plot_custom(model_GDP_calories_sat, 
+              vcov = vcov_GDP_calories_sat,
+              pred = "GDP_PPP",
+              resp = "calorie_availability",
+              saturation_level = sat_GDP_calories,
+              data = data_GDP_calories, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              )   #+ ylim(0,4)
+```
+
+
+
+## Death rate malnutrition
+
+build cross-section
+
+```{r}
+data_GDP_malnutrition <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, outcome_variable = "death_rate_malnutrition") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_malnutrition, "../data/aggregated_datasets/data_GDP_malnutrition.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_malnutrition %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_malnutrition <- lm(death_rate_malnutrition ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_malnutrition)
+
+vcov_GDP_malnutrition <- vcovHC(model_GDP_malnutrition, type = "HC3")
+
+parameters(model_GDP_malnutrition, vcov = vcov_GDP_malnutrition)
+```
+```{r}
+summary(model_GDP_malnutrition)
+```
+
+
+```{r}
+plot(model_GDP_malnutrition)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_malnutrition, 
+                                vcov = vcov_GDP_malnutrition,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_malnutrition, 
+                                vcov = vcov_GDP_malnutrition, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_malnutrition, 
+                                vcov = vcov_GDP_malnutrition, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_malnutrition, 
+                                vcov = vcov_GDP_malnutrition, pred = "GDP_PPP",data = data_GDP_malnutrition, insignificant_lines = "dashed", x.label = "GDP (PPP)", ) 
+```
+
+### saturation curves
+```{r}
+sat_GDP_malnutrition <- (data_GDP_malnutrition$death_rate_malnutrition %>% min() * 0.9)
+
+
+model_GDP_malnutrition_sat <- lm(log(death_rate_malnutrition - sat_GDP_malnutrition) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_malnutrition)
+
+vcov_GDP_malnutrition_sat <- vcovHC(model_GDP_malnutrition_sat, type = "HC3")
+
+```
+
+```{r}
+summary(model_GDP_malnutrition_sat)
+```
+```{r}
+interact_plot_custom(model_GDP_malnutrition_sat, 
+              vcov = vcov_GDP_malnutrition_sat,
+              pred = "GDP_PPP",
+              resp = "death_rate_malnutrition",
+              saturation_level = 0,
+              data = data_GDP_malnutrition, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              )   
+```
+```{r}
+ggintplot(obj = model_GDP_malnutrition_sat, 
+                                vcov = vcov_GDP_malnutrition_sat, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+# Health
+
+## Life expectancy
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_life_expect <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "life_expect") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_life_expect, "../data/aggregated_datasets/data_GDP_life_expect.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_life_expect %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+
+
+### logarithmic curves
+
+```{r}
+model_GDP_life_expect <- lm(life_expect ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_life_expect)
+vcov_GDP_life_expect <- vcovHC(model_GDP_life_expect, type = "HC3")
+
+parameters(model_GDP_life_expect, vcov = vcov_GDP_life_expect) 
+```
+
+```{r}
+summary(model_GDP_life_expect)
+```
+
+
+```{r}
+plot(model_GDP_life_expect)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_life_expect, 
+                                vcov = vcov_GDP_life_expect,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_life_expect, 
+          vcov = vcov_GDP_life_expect,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          ref = "capitalist_periphery",
+          ref_lab = "capitalist periphery regime type",
+          data = data_GDP_life_expect,
+          category_name = "regime_type",
+          title = FALSE, 
+          rug = TRUE, 
+          color_rug = TRUE,
+          color_rug_ref = "#004488",
+          color_rug_v1 = "#BB5566",
+          color_band = FALSE,
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          #legend = FALSE,
+          jitter_factor = 0.2)
+
+```
+
+```{r}
+ggintplot(obj = model_GDP_life_expect, 
+          vcov = vcov_GDP_life_expect,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          ref = "capitalist_periphery",
+          data = data_GDP_life_expect,
+          category_name = "regime_type",
+          color_rug = TRUE,
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_GDP_life_expect, 
+          vcov = vcov_GDP_life_expect,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          alt_ref = "regime_typecapitalist_core", ref_lab = "capitalist core",
+          color_rug = TRUE,
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+
+```{r}
+interact_plot_custom(model_GDP_life_expect, 
+              vcov = vcov_GDP_life_expect,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_life_expect, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Life expectancy (years)", 
+              ) 
+```
+
+
+### saturation curves 
+```{r}
+sat_GDP_life_expect <- data_GDP_life_expect$life_expect %>% max() * 1.1
+model_GDP_life_expect_sat <- lm(log(sat_GDP_life_expect - life_expect) ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_life_expect #%>% filter(! country_name %in% c("United Arab Emirates", "Kuwait"))
+                        )
+vcov_GDP_life_expect_sat <- vcovHC(model_GDP_life_expect_sat, type = "HC3")
+
+parameters(model_GDP_life_expect_sat, vcov = vcov_GDP_life_expect_sat)
+```
+```{r}
+summary(model_GDP_life_expect_sat)
+```
+```{r}
+plot(model_GDP_life_expect_sat)
+```
+```{r}
+interact_plot_custom(model_GDP_life_expect_sat, 
+              vcov = vcov_GDP_life_expect_sat,
+              pred = "GDP_PPP",
+              saturation_level = sat_GDP_life_expect,
+              resp = "life_expect",
+              
+              data = data_GDP_life_expect, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              ) 
+```
+
+```{r}
+ggintplot(obj = model_GDP_life_expect_sat, 
+          vcov = vcov_GDP_life_expect_sat,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          ref = "regime_typecapitalist_periphery",
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_life_expect_sat, 
+          vcov = vcov_GDP_life_expect_sat,
+          varnames = c("regime_typecapitalist_core","log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          alt_ref = TRUE, ref = "regime_typesocialist", ref_lab = "capitalist core",
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_life_expect_sat, 
+                                vcov = vcov_GDP_life_expect_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+#### socialist as reference category
+```{r}
+data_GDP_life_expect_socialist <- data_GDP_life_expect %>% mutate(regime_type = relevel(factor(regime_type), ref = "socialist"))
+
+model_GDP_life_expect_sat_socialist <- lm(log(sat_GDP_life_expect - life_expect) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_life_expect_socialist )
+vcov_GDP_life_expect_sat_socialist <- vcovHC(model_GDP_life_expect_sat_socialist, type = "HC3")
+
+ggintplot(obj = model_GDP_life_expect_sat_socialist, 
+          vcov = vcov_GDP_life_expect_sat_socialist,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+<!-- ### with physical integrity rights index as additional control variable -->
+
+<!-- ```{r} -->
+<!-- data_GDP_life_expect_with_rights <-  -->
+<!--   data_all %>%  -->
+<!--   cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "life_expect", aggregated_control = "physical_integrity_rights") %>%  -->
+<!--   former_states(aggregated_control = "physical_integrity_rights") %>%  -->
+<!--   update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>%  -->
+<!--   drop_na() -->
+
+
+<!-- writeLines("\nSocialist countries included:") -->
+<!-- data_GDP_life_expect_with_rights %>% filter(regime_type == "socialist") %>% pull(country_name) -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- model_GDP_life_expect_with_rights <- lm(life_expect ~ regime_type*log(GDP_PPP) + physical_integrity_rights,  -->
+<!--                         data = data_GDP_life_expect_with_rights) -->
+<!-- vcov_GDP_life_expect_with_rights <- vcovHC(model_GDP_life_expect_with_rights, type = "HC3") -->
+
+<!-- parameters(model_GDP_life_expect_with_rights, vcov = vcov_GDP_life_expect_with_rights) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ggintplot_categorical_moderator(obj = model_GDP_life_expect_with_rights,  -->
+<!--                                 vcov = vcov_GDP_life_expect_with_rights, -->
+<!--                                 pred = "log(GDP_PPP)",  -->
+<!--                                 categorical_moderator = "regime_type",  -->
+<!--                                 levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"), -->
+<!--                                 title = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ggintplot(obj = model_GDP_life_expect_with_rights,  -->
+<!--           vcov = vcov_GDP_life_expect_with_rights, -->
+<!--           varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"), -->
+<!--           title = TRUE,  -->
+<!--           rug = TRUE,  -->
+<!--           twoways = FALSE,  -->
+<!--           rugwidth = 0.5, -->
+<!--           unlog_x = TRUE, -->
+<!--           log_scale_x_axis = TRUE,  -->
+<!--           jitter_factor = 0.1) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ggintplot(obj = model_GDP_life_expect_with_rights,  -->
+<!--           vcov = vcov_GDP_life_expect_with_rights, -->
+<!--           varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"), -->
+<!--           title = TRUE,  -->
+<!--           rug = TRUE, -->
+<!--           rugwidth = 0.5, -->
+<!--           unlog_x = TRUE, -->
+<!--           log_scale_x_axis = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- interact_plot_custom(model_GDP_life_expect_with_rights,  -->
+<!--               vcov = vcov_GDP_life_expect_with_rights, -->
+<!--               pred = "GDP_PPP", -->
+
+<!--               data = data_GDP_life_expect, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Life expectancy (years)",  -->
+<!--               )  -->
+<!-- ``` -->
+
+
+
+## Child mortality
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_child_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "child_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_child_mortality, "../data/aggregated_datasets/data_GDP_child_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_child_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_child_mortality <- lm(child_mortality ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_child_mortality)
+vcov_GDP_child_mortality <- vcovHC(model_GDP_child_mortality, type = "HC3")
+
+parameters(model_GDP_child_mortality, vcov = vcov_GDP_child_mortality)
+```
+
+
+```{r}
+summary(model_GDP_child_mortality)
+```
+
+
+```{r}
+plot(model_GDP_child_mortality)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_child_mortality, 
+                                vcov = vcov_GDP_child_mortality,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_child_mortality, 
+          vcov = vcov_GDP_child_mortality,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+significant_ranges(obj = model_GDP_child_mortality, 
+          vcov = vcov_GDP_child_mortality,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"),
+          find_insignificant = TRUE) %>% lapply(exp)
+```
+
+
+
+```{r}
+ggintplot(obj = model_GDP_child_mortality, 
+          vcov = vcov_GDP_child_mortality,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_child_mortality, 
+              vcov = vcov_GDP_child_mortality,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_child_mortality, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              ) 
+```
+
+
+### saturation curves
+
+```{r}
+sat_GDP_child_mortality <- (data_GDP_child_mortality$child_mortality %>% min() * 0.9)
+
+model_GDP_child_mortality_sat <- lm(log(child_mortality - sat_GDP_child_mortality
+                                        ) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_child_mortality )
+vcov_GDP_child_mortality_sat <- vcovHC(model_GDP_child_mortality_sat, type = "HC3")
+
+parameters(model_GDP_child_mortality_sat, vcov = vcov_GDP_child_mortality_sat)
+```
+
+```{r}
+summary(model_GDP_child_mortality_sat)
+```
+
+```{r}
+plot(model_GDP_child_mortality_sat)
+```
+
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_child_mortality_sat, 
+                                vcov = vcov_GDP_child_mortality_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_GDP_child_mortality_sat, 
+          vcov = vcov_GDP_child_mortality_sat,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_GDP_child_mortality_sat, 
+          vcov = vcov_GDP_child_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_child_mortality_sat, 
+              vcov = vcov_GDP_child_mortality_sat,
+              resp = "child_mortality",
+              pred = "GDP_PPP",
+              saturation_level = 0,
+              data = data_GDP_child_mortality, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              reverse = TRUE,
+              )  
+```
+#### socialist as reference category
+```{r}
+data_GDP_child_mortality_socialist <- data_GDP_child_mortality %>% mutate(regime_type = relevel(factor(regime_type), ref = "socialist"))
+
+model_GDP_child_mortality_sat_socialist <- lm(log(child_mortality - sat_GDP_child_mortality) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_child_mortality_socialist )
+vcov_GDP_child_mortality_sat_socialist <- vcovHC(model_GDP_child_mortality_sat_socialist, type = "HC3")
+
+ggintplot(obj = model_GDP_child_mortality_sat_socialist, 
+          vcov = vcov_GDP_child_mortality_sat_socialist,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+## Infant mortality
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_infant_mortality <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "infant_mortality") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_infant_mortality, "../data/aggregated_datasets/data_GDP_infant_mortality.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_infant_mortality %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_infant_mortality <- lm(infant_mortality ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_infant_mortality)
+vcov_GDP_infant_mortality <- vcovHC(model_GDP_infant_mortality, type = "HC3")
+
+parameters(model_GDP_infant_mortality, vcov = vcov_GDP_infant_mortality)
+```
+
+```{r}
+plot(model_GDP_infant_mortality)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_infant_mortality, 
+                                vcov = vcov_GDP_infant_mortality,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_infant_mortality, 
+          vcov = vcov_GDP_infant_mortality,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_infant_mortality, 
+          vcov = vcov_GDP_infant_mortality,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_infant_mortality, 
+              vcov = vcov_GDP_infant_mortality,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_infant_mortality, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              ) 
+```
+
+
+### saturation curves
+```{r}
+
+sat_GDP_infant_mortality <- (data_GDP_infant_mortality$infant_mortality %>% min() * 0.9)
+
+
+model_GDP_infant_mortality_sat <- lm(log(infant_mortality - sat_GDP_infant_mortality) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_infant_mortality)
+vcov_GDP_infant_mortality_sat <- vcovHC(model_GDP_infant_mortality_sat, type = "HC3")
+
+parameters(model_GDP_infant_mortality_sat, vcov = vcov_GDP_infant_mortality_sat)
+```
+
+```{r}
+summary(model_GDP_infant_mortality_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_infant_mortality_sat, 
+                                vcov = vcov_GDP_infant_mortality_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_GDP_infant_mortality_sat, 
+          vcov = vcov_GDP_infant_mortality_sat,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+
+```{r}
+ggintplot(obj = model_GDP_infant_mortality_sat, 
+          vcov = vcov_GDP_infant_mortality_sat,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_infant_mortality_sat, 
+              vcov = vcov_GDP_infant_mortality_sat,
+              pred = "GDP_PPP",
+              resp = "infant_mortality",
+              saturation_level = 0,
+              data = data_GDP_infant_mortality, insignificant_lines = "dashed", x.label = "GDP (PPP)",
+              trans_x = "log10",
+              reverse = TRUE
+              )  
+```
+
+
+
+## Doctors
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_doctors <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "doctors") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_doctors, "../data/aggregated_datasets/data_GDP_doctors.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_doctors %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_doctors <- lm(doctors ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_doctors)
+vcov_GDP_doctors <- vcovHC(model_GDP_doctors, type = "HC3")
+
+parameters(model_GDP_doctors, vcov = vcov_GDP_doctors)
+```
+```{r}
+summary(model_GDP_doctors)
+```
+
+
+```{r}
+plot(model_GDP_doctors)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_doctors, 
+                                vcov = vcov_GDP_doctors,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_doctors, 
+          vcov = vcov_GDP_doctors,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_doctors, 
+          vcov = vcov_GDP_doctors,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_doctors, 
+              vcov = vcov_GDP_doctors,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_doctors, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Doctors per person", 
+              ) 
+```
+
+
+### saturation curves
+```{r}
+sat_GDP_doctors <- data_GDP_doctors$doctors %>% max() * 1.1
+model_GDP_doctors_sat <- lm(log(sat_GDP_doctors - doctors) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_doctors)
+vcov_GDP_doctors_sat <- vcovHC(model_GDP_doctors_sat, type = "HC3")
+
+summary(model_GDP_doctors_sat)
+```
+
+--> In the case of doctors, the fit is not better for a saturation curve (tested different saturation levels, does not change the pattern)
+--> This is not surprising given the plot for log curves, which actually shows quite a good fit already
+
+
+## Hospital beds
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_hospital_beds <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "hospital_beds") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_hospital_beds, "../data/aggregated_datasets/data_GDP_hospital_beds.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_hospital_beds %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_GDP_hospital_beds <- lm(hospital_beds ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_hospital_beds)
+vcov_GDP_hospital_beds <- vcovHC(model_GDP_hospital_beds, type = "HC3")
+
+parameters(model_GDP_hospital_beds, vcov = vcov_GDP_hospital_beds)
+```
+
+```{r}
+summary(model_GDP_hospital_beds)
+```
+
+
+```{r}
+plot(model_GDP_hospital_beds)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_hospital_beds, 
+                                vcov = vcov_GDP_hospital_beds,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_hospital_beds, 
+          vcov = vcov_GDP_hospital_beds,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_hospital_beds, 
+          vcov = vcov_GDP_hospital_beds,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_hospital_beds, 
+              vcov = vcov_GDP_hospital_beds,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_hospital_beds, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Hospital beds", 
+              ) 
+```
+
+### saturation curves
+```{r}
+sat_GDP_hospital_beds <- data_GDP_hospital_beds$hospital_beds %>% max() * 1.1
+model_GDP_hospital_beds_sat <- lm(log(sat_GDP_hospital_beds - hospital_beds) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_hospital_beds)
+vcov_GDP_hospital_beds_sat <- vcovHC(model_GDP_hospital_beds_sat, type = "HC3")
+
+summary(model_GDP_hospital_beds_sat)
+```
+--> same as for doctors, fit gets worse
+
+
+
+# Water
+
+## Death rate poor sanitation
+
+build cross-section
+
+```{r}
+data_GDP_sanitation <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, outcome_variable = "death_rate_sanitation") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_sanitation, "../data/aggregated_datasets/data_GDP_sanitation.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_sanitation %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_sanitation <- lm(death_rate_sanitation ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_sanitation)
+
+vcov_GDP_sanitation <- vcovHC(model_GDP_sanitation, type = "HC3")
+
+parameters(model_GDP_sanitation, vcov = vcov_GDP_sanitation)
+```
+```{r}
+summary(model_GDP_sanitation)
+```
+```{r}
+plot(model_GDP_sanitation)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_sanitation, 
+                                vcov = vcov_GDP_sanitation,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_sanitation, 
+                                vcov = vcov_GDP_sanitation, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_sanitation, 
+                                vcov = vcov_GDP_sanitation, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_sanitation, 
+                                vcov = vcov_GDP_sanitation, pred = "GDP_PPP",data = data_GDP_sanitation, insignificant_lines = "dashed", x.label = "GDP (PPP)", ) 
+```
+
+### saturation curves
+```{r}
+sat_GDP_sanitation <- (data_GDP_sanitation$death_rate_sanitation %>% min() * 0.9)
+
+
+model_GDP_sanitation_sat <- lm(log(death_rate_sanitation - sat_GDP_sanitation) ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_sanitation)
+
+vcov_GDP_sanitation_sat <- vcovHC(model_GDP_sanitation_sat, type = "HC3")
+
+parameters(model_GDP_sanitation_sat, vcov = vcov_GDP_sanitation_sat)
+```
+```{r}
+summary(model_GDP_sanitation_sat)
+```
+```{r}
+plot(model_GDP_sanitation_sat)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_sanitation_sat, 
+                                vcov = vcov_GDP_sanitation_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_sanitation_sat, 
+                                vcov = vcov_GDP_sanitation_sat, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_sanitation_sat, 
+                                vcov = vcov_GDP_sanitation_sat, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_sanitation_sat, 
+                     vcov = vcov_GDP_sanitation_sat, 
+                     pred = "GDP_PPP",
+                     resp = "death_rate_sanitation",
+                     saturation_level = sat_GDP_sanitation,
+                     data = data_GDP_sanitation, 
+                     insignificant_lines = "dashed", 
+                     x.label = "GDP ($ per capita)", 
+                     #y_max = 400,
+                     reverse = TRUE,
+                     percent = TRUE,
+                     y.label = "Poor sanitation death rate",
+                     y_max = 0.45,
+                     trans_x = "log10")  #+ scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+
+# Education
+
+## Schooling
+
+build cross-section
+
+```{r}
+data_GDP_schooling <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "years_schooling") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_schooling, "../data/aggregated_datasets/data_GDP_schooling.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_schooling %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_schooling <- lm(years_schooling ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_schooling)
+
+vcov_GDP_schooling <- vcovHC(model_GDP_schooling, type = "HC3")
+
+parameters(model_GDP_schooling, vcov = vcov_GDP_schooling)
+```
+
+```{r}
+summary(model_GDP_schooling)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_schooling, vcov = vcov_GDP_schooling, 
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_schooling, vcov = vcov_GDP_schooling, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_schooling, vcov = vcov_GDP_schooling, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_schooling, vcov = vcov_GDP_schooling, pred = "GDP_PPP",data = data_GDP_schooling, insignificant_lines = "dashed", x.label = "GDP (PPP)", ) 
+```
+
+
+
+### saturation curves
+```{r}
+sat_GDP_schooling <- data_GDP_schooling$years_schooling %>% max() * 1.1
+model_GDP_schooling_sat <- lm(log(sat_GDP_schooling - years_schooling) ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_schooling)
+vcov_GDP_schooling_sat <- vcovHC(model_GDP_schooling_sat, type = "HC3")
+
+parameters(model_GDP_schooling_sat, vcov = vcov_GDP_schooling_sat)
+```
+```{r}
+summary(model_GDP_schooling_sat)
+```
+```{r}
+plot(model_GDP_schooling_sat)
+```
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_schooling_sat, 
+                                vcov = vcov_GDP_schooling_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+```{r}
+ggintplot(obj = model_GDP_schooling_sat, 
+          vcov = vcov_GDP_schooling_sat,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+interact_plot_custom(model_GDP_schooling_sat, 
+              vcov = vcov_GDP_schooling_sat,
+              pred = "GDP_PPP",
+              resp = "years_schooling",
+              saturation_level = sat_GDP_schooling,
+              data = data_GDP_schooling, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              )
+```
+
+
+
+## Adult literacy
+
+build cross-section
+
+```{r}
+data_GDP_literacy <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "literacy_rate") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_literacy, "../data/aggregated_datasets/data_GDP_literacy.csv")
+
+
+writeLines("\nSocialist countries included:")
+data_GDP_literacy %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_literacy <- lm(literacy_rate ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_literacy)
+
+vcov_GDP_literacy <- vcovHC(model_GDP_literacy, type = "HC3")
+
+parameters(model_GDP_literacy, vcov = vcov_GDP_literacy)
+```
+```{r}
+summary(model_GDP_literacy)
+```
+
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_literacy, vcov = vcov_GDP_literacy, 
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_literacy, vcov = vcov_GDP_literacy, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_literacy, vcov = vcov_GDP_literacy, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_literacy, vcov = vcov_GDP_literacy, pred = "GDP_PPP",data = data_GDP_literacy, insignificant_lines = "dashed", x.label = "GDP (PPP)", ) 
+```
+
+
+
+### saturation curves
+
+```{r}
+
+sat_GDP_literacy <- 100.1
+
+model_GDP_literacy_sat <- lm(log(sat_GDP_literacy-literacy_rate) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_literacy)
+
+vcov_GDP_literacy_sat <- vcovHC(model_GDP_literacy_sat, type = "HC3")
+
+summary(model_GDP_literacy_sat)
+```
+
+```{r}
+interact_plot_custom(model_GDP_literacy_sat, 
+              vcov = vcov_GDP_literacy_sat,
+              pred = "GDP_PPP",
+              resp = "literacy_rate",
+              saturation_level = sat_GDP_literacy,
+              data = data_GDP_literacy, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              )
+```
+
+```{r}
+ggintplot(obj = model_GDP_literacy_sat, vcov = vcov_GDP_literacy_sat, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_literacy_sat, vcov = vcov_GDP_literacy_sat, 
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+# Energy
+
+## Access to electricity
+
+build cross-section
+
+```{r}
+data_GDP_electricity <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, outcome_variable = "electricity_access") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_electricity, "../data/aggregated_datasets/data_GDP_electricity.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_electricity %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_electricity <- lm(electricity_access ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_electricity)
+
+vcov_GDP_electricity <- vcovHC(model_GDP_electricity, type = "HC3")
+
+parameters(model_GDP_electricity, vcov = vcov_GDP_electricity)
+```
+```{r}
+summary(model_GDP_electricity)
+```
+
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_electricity, 
+                                vcov = vcov_GDP_electricity,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_electricity, 
+                                vcov = vcov_GDP_electricity, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_electricity, 
+                                vcov = vcov_GDP_electricity, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_electricity, 
+                                vcov = vcov_GDP_electricity, pred = "GDP_PPP",data = data_GDP_electricity, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Access to electricity", ) 
+```
+
+### without North Korea
+```{r}
+data_GDP_electricity_without_North_Korea <- data_GDP_electricity %>% filter(country_name!="North Korea")
+write_csv(data_GDP_electricity_without_North_Korea, "../data/aggregated_datasets/data_GDP_electricity_without_North_Korea.csv")
+model_GDP_electricity_without_North_Korea <- lm(electricity_access ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_electricity_without_North_Korea)
+
+vcov_GDP_electricity_without_North_Korea <- vcovHC(model_GDP_electricity_without_North_Korea, type = "HC3")
+
+parameters(model_GDP_electricity_without_North_Korea, vcov = vcov_GDP_electricity_without_North_Korea)
+```
+```{r}
+summary(model_GDP_electricity_without_North_Korea)
+```
+
+
+```{r}
+plot(model_GDP_electricity_without_North_Korea)
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_electricity_without_North_Korea, 
+                                vcov = vcov_GDP_electricity_without_North_Korea,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+
+
+```{r}
+ggintplot(obj = model_GDP_electricity_without_North_Korea, 
+                                vcov = vcov_GDP_electricity_without_North_Korea, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+ggintplot(obj = model_GDP_electricity_without_North_Korea, 
+                                vcov = vcov_GDP_electricity_without_North_Korea, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+
+
+```{r}
+interact_plot_custom(model_GDP_electricity_without_North_Korea, 
+                                vcov = vcov_GDP_electricity_without_North_Korea, pred = "GDP_PPP",data = data_GDP_electricity, insignificant_lines = "dashed", x.label = "GDP (PPP)", )  + ylim(0, 150)
+```
+
+### saturation curves
+```{r}
+sat_GDP_electricity <- 100.1
+
+
+model_GDP_electricity_without_North_Korea_sat <- lm(log(sat_GDP_electricity-electricity_access) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_electricity_without_North_Korea)
+
+vcov_GDP_electricity_without_North_Korea_sat <- vcovHC(model_GDP_electricity_without_North_Korea_sat, type = "HC3")
+
+summary(model_GDP_electricity_without_North_Korea_sat)
+```
+
+```{r}
+ggintplot(obj = model_GDP_electricity_without_North_Korea_sat, 
+                                vcov = vcov_GDP_electricity_without_North_Korea_sat, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP (PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+
+```{r}
+interact_plot_custom(model_GDP_electricity_without_North_Korea_sat, 
+              vcov = vcov_GDP_electricity_without_North_Korea_sat,
+              pred = "GDP_PPP",
+              resp = "electricity_access",
+              saturation_level = sat_GDP_electricity,
+              data = data_GDP_electricity, insignificant_lines = "dashed", x.label = "GDP (PPP)", 
+              )  
+```
+
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_electricity_without_North_Korea_sat, 
+                                vcov = vcov_GDP_electricity_without_North_Korea_sat,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE, 
+                                verbose = FALSE)
+```
+
+
+
+
+# Social equity
+
+## Gini index
+
+build cross-section
+
+```{r}
+data_GDP_gini <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "gini_index") %>% 
+  mutate(gini_index = # fill missing values for certain socialist countries with next year available
+           case_match(
+             country_name,
+             "Poland"  ~ 
+               data_all %>% 
+               filter(country_name == "Poland", year == 1983) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Bulgaria" ~
+               data_all %>% 
+               filter(country_name == "Bulgaria", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             "Romania" ~
+               data_all %>% 
+               filter(country_name == "Romania", year == 1989) %>% 
+               pull(gini_index) %>% magrittr::extract(1),
+             .default = gini_index)
+         ) %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na() %>% 
+  filter(regime_type != "revolutionary")
+write_csv(data_GDP_gini, "../data/aggregated_datasets/data_GDP_gini.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_gini %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+
+
+```{r}
+model_GDP_gini <- lm(gini_index ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_gini)
+
+vcov_GDP_gini <- vcovHC(model_GDP_gini, type = "HC3")
+
+parameters(model_GDP_gini, vcov = vcov_GDP_gini)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_gini, 
+                                vcov = vcov_GDP_gini,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_gini, 
+                                vcov = vcov_GDP_gini, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_gini, 
+                                vcov = vcov_GDP_gini, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_gini, 
+                                vcov = vcov_GDP_gini, pred = "GDP_PPP",data = data_GDP_gini, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Gini index", ) 
+```
+
+### only regime type
+```{r}
+model_regime_gini <- lm(gini_index ~ regime_type, 
+                        data = data_GDP_gini)
+
+vcov_regime_gini <- vcovHC(model_regime_gini, type = "HC3")
+
+parameters(model_regime_gini, vcov = vcov_regime_gini)
+```
+
+
+
+
+## Social services quality
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_social_services <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "social_services") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_social_services, "../data/aggregated_datasets/data_GDP_social_services.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_social_services %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_GDP_social_services <- lm(social_services ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_social_services)
+vcov_GDP_social_services <- vcovHC(model_GDP_social_services, type = "HC3")
+
+parameters(model_GDP_social_services, vcov = vcov_GDP_social_services)
+```
+
+```{r}
+summary(model_GDP_social_services)
+```
+
+
+```{r}
+plot(model_GDP_social_services)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_social_services, 
+                                vcov = vcov_GDP_social_services,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_social_services, 
+          vcov = vcov_GDP_social_services,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_social_services, 
+          vcov = vcov_GDP_social_services,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_social_services, 
+              vcov = vcov_GDP_social_services,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_social_services, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Physical integrity rights index", 
+              ) 
+```
+
+### saturation curves
+```{r}
+sat_GDP_social_services <- 1
+model_GDP_social_services_sat <- lm(log(sat_GDP_social_services - social_services) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_social_services)
+vcov_GDP_social_services_sat <- vcovHC(model_GDP_social_services_sat, type = "HC3")
+
+summary(model_GDP_social_services_sat)
+```
+```{r}
+interact_plot_custom(model_GDP_social_services_sat, 
+              vcov = vcov_GDP_social_services_sat,
+              saturation_level = sat_GDP_social_services,
+              pred = "GDP_PPP",
+              resp = "social_services",
+              data = data_GDP_social_services, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Equal resource distriution index", 
+              ) 
+```
+
+# Gender equality
+
+## Women in parliament
+
+build cross-section
+
+```{r}
+data_GDP_women_parliament <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "women_parliament") %>% 
+  as.data.frame() %>% 
+  {mutate(.,women_parliament= case_match(
+    .$country_name, 
+    "USSR" ~ .[which(.$former_state == "USSR"), "women_parliament"][1],
+    "Czechoslovakia" ~ .[which(.$former_state == "CSK"), "women_parliament"][1],
+    "Yugoslavia" ~ .[which(.$former_state == "Yugo"), "women_parliament"][1],
+    .default = .$women_parliament))} %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_women_parliament, "../data/aggregated_datasets/data_GDP_women_parliament.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_women_parliament %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_women_parliament <- lm(women_parliament ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_women_parliament)
+
+vcov_GDP_women_parliament <- vcovHC(model_GDP_women_parliament, type = "HC3")
+
+parameters(model_GDP_women_parliament, vcov = vcov_GDP_women_parliament)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_women_parliament, 
+                                vcov = vcov_GDP_women_parliament,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_women_parliament, 
+                                vcov = vcov_GDP_women_parliament, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_women_parliament, 
+                                vcov = vcov_GDP_women_parliament, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_women_parliament, 
+                                vcov = vcov_GDP_women_parliament, pred = "GDP_PPP",data = data_GDP_women_parliament, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Women in parliament", ) 
+```
+
+### only regime type
+```{r}
+model_regime_women_parliament <- lm(women_parliament ~ regime_type, 
+                        data = data_GDP_women_parliament)
+
+vcov_regime_women_parliament <- vcovHC(model_regime_women_parliament, type = "HC3")
+
+parameters(model_regime_women_parliament, vcov = vcov_regime_women_parliament)
+```
+
+
+
+## Female labour force participation
+
+build cross-section
+
+```{r}
+data_GDP_female_labour <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1990, year_outcome = 1990, outcome_variable = "female_labour") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_female_labour, "../data/aggregated_datasets/data_GDP_female_labour.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_female_labour %>% filter(regime_type == "socialist") %>% pull(country_name)
+
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_female_labour <- lm(female_labour ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_female_labour)
+
+vcov_GDP_female_labour <- vcovHC(model_GDP_female_labour, type = "HC3")
+
+parameters(model_GDP_female_labour, vcov = vcov_GDP_female_labour)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_female_labour, 
+                                vcov = vcov_GDP_female_labour,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_female_labour, 
+                                vcov = vcov_GDP_female_labour, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_female_labour, 
+                                vcov = vcov_GDP_female_labour, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_female_labour, 
+                                vcov = vcov_GDP_female_labour, pred = "GDP_PPP",data = data_GDP_female_labour, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Female labour force participation", ) 
+```
+
+### only regime type
+```{r}
+model_regime_female_labour <- lm(female_labour ~ regime_type, 
+                        data = data_GDP_female_labour)
+
+vcov_regime_female_labour <- vcovHC(model_regime_female_labour, type = "HC3")
+
+parameters(model_regime_female_labour, vcov = vcov_regime_female_labour)
+```
+
+
+
+## Female labour income share
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_female_labour_income <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1991, year_outcome = 1991, outcome_variable = "female_labour_income") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_female_labour_income, "../data/aggregated_datasets/data_GDP_female_labour_income.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_female_labour_income %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_GDP_female_labour_income <- lm(female_labour_income ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_female_labour_income)
+vcov_GDP_female_labour_income <- vcovHC(model_GDP_female_labour_income, type = "HC3")
+
+parameters(model_GDP_female_labour_income, vcov = vcov_GDP_female_labour_income)
+```
+
+```{r}
+summary(model_GDP_female_labour_income)
+```
+
+
+```{r}
+plot(model_GDP_female_labour_income)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_female_labour_income, 
+                                vcov = vcov_GDP_female_labour_income,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_female_labour_income, 
+          vcov = vcov_GDP_female_labour_income,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_female_labour_income, 
+          vcov = vcov_GDP_female_labour_income,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_female_labour_income, 
+              vcov = vcov_GDP_female_labour_income,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_female_labour_income, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Female labour income share", 
+              ) 
+```
+
+
+
+
+### only regime type
+```{r}
+model_regime_female_labour_income <- lm(female_labour_income ~ regime_type, 
+                        data = data_GDP_female_labour_income)
+
+vcov_regime_female_labour_income <- vcovHC(model_regime_female_labour_income, type = "HC3")
+
+parameters(model_regime_female_labour_income, vcov = vcov_regime_female_labour_income)
+```
+
+## Adolescent fertility rate
+
+build cross-section
+
+```{r}
+data_GDP_adolescent_pregnancies <- 
+  data_all %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "adolescent_pregnancies") %>% 
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_adolescent_pregnancies, "../data/aggregated_datasets/data_GDP_adolescent_pregnancies.csv")
+
+
+writeLines("\nSocialist countries included:")
+data_GDP_adolescent_pregnancies %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+### logarithmic curves
+
+```{r}
+model_GDP_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_adolescent_pregnancies)
+
+vcov_GDP_adolescent_pregnancies <- vcovHC(model_GDP_adolescent_pregnancies, type = "HC3")
+
+parameters(model_GDP_adolescent_pregnancies, vcov = vcov_GDP_adolescent_pregnancies)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_adolescent_pregnancies, 
+                                vcov = vcov_GDP_adolescent_pregnancies,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_adolescent_pregnancies, 
+                                vcov = vcov_GDP_adolescent_pregnancies, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_adolescent_pregnancies, 
+                                vcov = vcov_GDP_adolescent_pregnancies, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_adolescent_pregnancies, 
+                                vcov = vcov_GDP_adolescent_pregnancies, pred = "GDP_PPP",data = data_GDP_adolescent_pregnancies, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Adolescent pregnancy rate", ) 
+```
+
+
+### only regime type
+```{r}
+model_regime_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type, 
+                        data = data_GDP_adolescent_pregnancies)
+
+vcov_regime_adolescent_pregnancies <- vcovHC(model_regime_adolescent_pregnancies, type = "HC3")
+
+parameters(model_regime_adolescent_pregnancies, vcov = vcov_regime_adolescent_pregnancies)
+```
+
+
+
+
+# Political voice
+## Physical integrity rights index
+
+
+
+build cross-sectional dataset
+
+```{r}
+data_GDP_physical_integrity_rights <- 
+  data_all %>% 
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "physical_integrity_rights") %>%
+  former_states() %>% 
+  update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
+  drop_na()
+write_csv(data_GDP_physical_integrity_rights, "../data/aggregated_datasets/data_GDP_physical_integrity_rights.csv")
+
+writeLines("\nSocialist countries included:")
+data_GDP_physical_integrity_rights %>% filter(regime_type == "socialist") %>% pull(country_name)
+```
+
+
+### logarithmic curves
+
+```{r}
+model_GDP_physical_integrity_rights <- lm(physical_integrity_rights ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_physical_integrity_rights)
+vcov_GDP_physical_integrity_rights <- vcovHC(model_GDP_physical_integrity_rights, type = "HC3")
+
+parameters(model_GDP_physical_integrity_rights, vcov = vcov_GDP_physical_integrity_rights)
+```
+
+```{r}
+summary(model_GDP_physical_integrity_rights)
+```
+
+
+```{r}
+plot(model_GDP_physical_integrity_rights)
+```
+
+```{r}
+ggintplot_categorical_moderator(obj = model_GDP_physical_integrity_rights, 
+                                vcov = vcov_GDP_physical_integrity_rights,
+                                pred = "log(GDP_PPP)", 
+                                categorical_moderator = "regime_type", 
+                                levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
+                                title = TRUE)
+```
+
+```{r}
+ggintplot(obj = model_GDP_physical_integrity_rights, 
+          vcov = vcov_GDP_physical_integrity_rights,
+          varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+          title = TRUE, 
+          rug = TRUE, 
+          twoways = FALSE, 
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE, 
+          jitter_factor = 0.1)
+```
+
+```{r}
+ggintplot(obj = model_GDP_physical_integrity_rights, 
+          vcov = vcov_GDP_physical_integrity_rights,
+          varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+          title = TRUE, 
+          rug = TRUE,
+          rugwidth = 0.5,
+          unlog_x = TRUE,
+          log_scale_x_axis = TRUE)
+```
+
+```{r}
+interact_plot_custom(model_GDP_physical_integrity_rights, 
+              vcov = vcov_GDP_physical_integrity_rights,
+              pred = "GDP_PPP",
+              
+              data = data_GDP_physical_integrity_rights, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Physical integrity rights index", 
+              ) 
+```
+
+### saturation curves
+```{r}
+sat_GDP_physical_integrity_rights <- 1
+model_GDP_physical_integrity_rights_sat <- lm(log(sat_GDP_physical_integrity_rights - physical_integrity_rights) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_physical_integrity_rights)
+vcov_GDP_physical_integrity_rights_sat <- vcovHC(model_GDP_physical_integrity_rights_sat, type = "HC3")
+
+summary(model_GDP_physical_integrity_rights_sat)
+```
+```{r}
+interact_plot_custom(model_GDP_physical_integrity_rights_sat, 
+              vcov = vcov_GDP_physical_integrity_rights_sat,
+              saturation_level = sat_GDP_physical_integrity_rights,
+              pred = "GDP_PPP",
+              resp = "physical_integrity_rights",
+              data = data_GDP_physical_integrity_rights, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Physical integrity rights index", 
+              ) 
+```
+
+
+
+
+
+# Trellis plots
+
+```{r}
+argument_list_GDP <- list(pred = "GDP_PPP", x.label = "GDP ($ per capita)", x_max = 20000, point.size = 0.8, line.thickness = 0.8, insignificant_lines = "dashed")
+
+```
+
+
+
+
+## Selection main part 
+
+```{r}
+
+
+
+interact_plot_poverty_without_Mongolia <- do.call(interact_plot_custom, c(list(model_GDP_poverty_without_Mongolia_sat, vcov_GDP_poverty_without_Mongolia_sat, data_GDP_poverty_without_Mongolia, y.label = "Basic needs poverty rate", reverse = TRUE, percentage = TRUE, saturation_level = sat_GDP_poverty_rate, resp = "poverty_rate", y_max = 100), argument_list_GDP))
+
+
+
+interact_plot_life_expect <- do.call(interact_plot_custom, c(list(model_GDP_life_expect_sat, vcov_GDP_life_expect_sat, data_GDP_life_expect,  y.label = "Life expectancy (years)", 
+                                                                  resp = "life_expect",
+                                                                  saturation_level = sat_GDP_life_expect,
+                                                                  y_max = 80), argument_list_GDP))
+
+
+interact_plot_sanitation <- do.call(interact_plot_custom, c(list(model_GDP_sanitation_sat, vcov_GDP_sanitation_sat, data_GDP_sanitation, y.label = "Poor sanitation death rate", reverse = TRUE, res = "death_rate_sanitation", saturation_level = sat_GDP_sanitation, y_max = 0.4, percentage = TRUE), argument_list_GDP))
+
+
+interact_plot_schooling <- do.call(interact_plot_custom, c(list(model_GDP_schooling_sat, vcov_GDP_schooling_sat, data_GDP_schooling, y.label = "Years of schooling", resp = "years_schooling", saturation_level = sat_GDP_schooling), argument_list_GDP))
+
+interact_plot_electricity <- do.call(interact_plot_custom, c(list(model_GDP_electricity_without_North_Korea_sat, vcov_GDP_electricity_without_North_Korea_sat, data_GDP_electricity_without_North_Korea, y.label = "Access to electricity", y_max = 100, resp = "electricity_access", saturation_level = sat_GDP_electricity, percentage = TRUE), argument_list_GDP))
+                                     
+interact_plot_gini <- do.call(interact_plot_custom, c(list(model_GDP_gini, vcov_GDP_gini, data_GDP_gini, y.label = "Gini index", reverse = TRUE), argument_list_GDP))
+
+interact_plot_women_parliament <- do.call(interact_plot_custom, c(list(model_GDP_women_parliament, vcov_GDP_women_parliament, data_GDP_women_parliament, y.label = "Female parliament members", percentage = TRUE), argument_list_GDP))
+
+
+interact_plot_physical_integrity_rights <- do.call(interact_plot_custom, c(list(model_GDP_physical_integrity_rights_sat, vcov_GDP_physical_integrity_rights_sat, data_GDP_physical_integrity_rights,  y.label = "Physical integrity rights index", 
+                                                                  resp = "physical_integrity_rights",
+                                                                  saturation_level = sat_GDP_physical_integrity_rights), argument_list_GDP))
+
+
+```
+
+
+```{r}
+
+ggarrange(
+  interact_plot_poverty_without_Mongolia + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_life_expect + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_sanitation + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_schooling + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_electricity + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_gini + 
+    theme(axis.title.x = element_blank()),
+    interact_plot_women_parliament,
+  interact_plot_physical_integrity_rights,
+  nrow = 4, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_gdp_main_part.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+```
+
+
+## Rest of indicators
+```{r}
+
+
+
+interact_plot_calories <- do.call(interact_plot_custom, c(list(model_GDP_calories, vcov_GDP_calories, data_GDP_calories, y.label = "Calories per person", resp = "calorie_availability"), argument_list_GDP))
+
+interact_plot_malnutrition <- do.call(interact_plot_custom, c(list(model_GDP_malnutrition_sat, vcov_GDP_malnutrition_sat, data_GDP_malnutrition, y.label = "Malnutrition death rate", reverse = TRUE, ignore_significance_right = FALSE, percentage = TRUE, resp = "death_rate_malnutrition", saturation_level = sat_GDP_malnutrition), argument_list_GDP))
+
+
+
+interact_plot_child_mortality <- do.call(interact_plot_custom, c(list(model_GDP_child_mortality_sat, vcov_GDP_child_mortality_sat, data_GDP_child_mortality, y.label = "Child mortality rate", reverse = TRUE, percentage = TRUE, resp = "child_mortality", saturation_level = sat_GDP_child_mortality), argument_list_GDP))
+
+interact_plot_infant_mortality <- do.call(interact_plot_custom, c(list(model_GDP_infant_mortality_sat, vcov_GDP_infant_mortality_sat, data_GDP_infant_mortality, y.label = "Infant mortality rate", reverse = TRUE, percentage = TRUE, resp = "infant_mortality", saturation_level = sat_GDP_infant_mortality), argument_list_GDP))
+
+
+interact_plot_doctors <- do.call(interact_plot_custom, c(list(model_GDP_doctors, vcov_GDP_doctors, data_GDP_doctors, y.label = "Doctors per 1000 people"), argument_list_GDP))
+
+interact_plot_hospital_beds <- do.call(interact_plot_custom, c(list(model_GDP_hospital_beds, vcov_GDP_hospital_beds, data_GDP_hospital_beds, y.label = "Hospital beds per 1000 people"), argument_list_GDP))
+
+
+interact_plot_literacy <- do.call(interact_plot_custom, c(list(model_GDP_literacy_sat, vcov_GDP_literacy_sat, data_GDP_literacy, y.label = "Adult literacy", y_max = 100, percentage = TRUE, resp = "literacy_rate", sat_GDP_literacy), argument_list_GDP))
+
+interact_plot_social_services <- do.call(interact_plot_custom, c(list(model_GDP_social_services_sat, vcov_GDP_social_services_sat, data_GDP_social_services, y.label = "Social services quality",  resp = "social_services", sat_GDP_social_services), argument_list_GDP))
+
+interact_plot_female_labour <- do.call(interact_plot_custom, c(list(model_GDP_female_labour, vcov_GDP_female_labour, data_GDP_female_labour, y.label = "Female labour force participation", percentage = TRUE), argument_list_GDP))
+
+interact_plot_female_labour_income <- do.call(interact_plot_custom, c(list(model_GDP_female_labour_income, vcov_GDP_female_labour_income, data_GDP_female_labour_income, y.label = "Female labour income share", percentage = TRUE), argument_list_GDP))
+
+
+interact_plot_adolescent_pregnancies <- do.call(interact_plot_custom, c(list(model_GDP_adolescent_pregnancies, vcov_GDP_adolescent_pregnancies, data_GDP_adolescent_pregnancies, y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE), argument_list_GDP))
+```
+
+```{r}
+
+ggarrange(
+  interact_plot_calories + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_malnutrition + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_child_mortality + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_infant_mortality + 
+    theme(axis.title.x = element_blank()),
+  interact_plot_doctors,
+  interact_plot_hospital_beds, 
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_gdp_extended_data_1.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+
+
+
+ggarrange(
+  interact_plot_literacy + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_social_services + 
+    theme(axis.title.x = element_blank()), 
+  interact_plot_female_labour +
+    theme(axis.title.x = element_blank()),
+  interact_plot_female_labour_income,
+  interact_plot_adolescent_pregnancies,
+  nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
+
+ggsave(file = "../figures/trellis_gdp_extended_data_2.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
+
+
+```
+
+
+# SuppInf 
+
+```{r}
+
+generate_supplementary_information(model = model_GDP_life_expect, vcov = vcov_GDP_life_expect, model_sat = model_GDP_life_expect_sat, vcov_sat = vcov_GDP_life_expect_sat, data = data_GDP_life_expect, pred = "GDP_PPP", resp = "life_expect", y.label = "Life expectancy (years)", percentage = FALSE, reverse = FALSE, sat = sat_GDP_life_expect, y_max = NA)
+
+
+
+generate_supplementary_information(model = model_GDP_child_mortality, vcov = vcov_GDP_child_mortality, model_sat = model_GDP_child_mortality_sat, vcov_sat = vcov_GDP_child_mortality_sat, data = data_GDP_child_mortality, pred = "GDP_PPP", resp = "child_mortality", y.label = "Child mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_child_mortality, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_GDP_infant_mortality, vcov = vcov_GDP_infant_mortality, model_sat = model_GDP_infant_mortality_sat, vcov_sat = vcov_GDP_infant_mortality_sat, data = data_GDP_infant_mortality, pred = "GDP_PPP", resp = "infant_mortality", y.label = "Infant mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_infant_mortality, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_GDP_doctors, vcov = vcov_GDP_doctors, model_sat = model_GDP_doctors_sat, vcov_sat = vcov_GDP_doctors_sat, data = data_GDP_doctors, pred = "GDP_PPP", resp = "doctors", y.label = "Doctors per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_GDP_doctors, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_hospital_beds, vcov = vcov_GDP_hospital_beds, model_sat = model_GDP_hospital_beds_sat, vcov_sat = vcov_GDP_hospital_beds_sat, data = data_GDP_hospital_beds, pred = "GDP_PPP", resp = "hospital_beds", y.label = "Hospital beds per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_GDP_hospital_beds, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_poverty_without_Mongolia, vcov = vcov_GDP_poverty_without_Mongolia, model_sat = model_GDP_poverty_without_Mongolia_sat, vcov_sat = vcov_GDP_poverty_without_Mongolia_sat, data = data_GDP_poverty_without_Mongolia, pred = "GDP_PPP", resp = "poverty_rate", y.label = "Basic needs poverty rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_poverty_rate, y_max = 100, y_min = 0)
+
+generate_supplementary_information(model = model_GDP_calories, vcov = vcov_GDP_calories, model_sat = model_GDP_calories_sat, vcov_sat = vcov_GDP_calories_sat, data = data_GDP_calories, pred = "GDP_PPP", resp = "calorie_availability", y.label = "Calories per person", percentage = FALSE, reverse = FALSE, sat = sat_GDP_calories, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_malnutrition, vcov = vcov_GDP_malnutrition, model_sat = model_GDP_malnutrition_sat, vcov_sat = vcov_GDP_malnutrition_sat, data = data_GDP_malnutrition, pred = "GDP_PPP", resp = "death_rate_malnutrition", y.label = "Malnutrition death rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_malnutrition, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_GDP_schooling, vcov = vcov_GDP_schooling, model_sat = model_GDP_schooling_sat, vcov_sat = vcov_GDP_schooling_sat, data = data_GDP_schooling, pred = "GDP_PPP", resp = "years_schooling", y.label = "Years of schooling", percentage = FALSE, reverse = FALSE, sat = sat_GDP_schooling, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_literacy, vcov = vcov_GDP_literacy, model_sat = model_GDP_literacy_sat, vcov_sat = vcov_GDP_literacy_sat, data = data_GDP_literacy, pred = "GDP_PPP", resp = "literacy_rate", y.label = "Adult literacy", percentage = TRUE, reverse = FALSE, sat = sat_GDP_literacy, y_max = 100)
+
+
+generate_supplementary_information(model = model_GDP_sanitation, vcov = vcov_GDP_sanitation, model_sat = model_GDP_sanitation_sat, vcov_sat = vcov_GDP_sanitation_sat, data = data_GDP_sanitation, pred = "GDP_PPP", resp = "death_rate_sanitation", y.label = "Poor sanitation death rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_sanitation, y_max = NA, y_min = 0)
+
+generate_supplementary_information(model = model_GDP_electricity_without_North_Korea, vcov = vcov_GDP_electricity_without_North_Korea, model_sat = model_GDP_electricity_without_North_Korea_sat, vcov_sat = vcov_GDP_electricity_without_North_Korea_sat, data = data_GDP_electricity_without_North_Korea, pred = "GDP_PPP", resp = "electricity_access", y.label = "Access to electricity", percentage = TRUE, reverse = FALSE, sat = sat_GDP_electricity, y_max = 100)
+
+
+generate_supplementary_information(model = model_GDP_physical_integrity_rights, vcov = vcov_GDP_physical_integrity_rights, model_sat = model_GDP_physical_integrity_rights_sat, vcov_sat = vcov_GDP_physical_integrity_rights_sat, data = data_GDP_physical_integrity_rights, pred = "GDP_PPP", resp = "physical_integrity_rights", y.label = "Physical integrity rights index", percentage = FALSE, reverse = FALSE, sat = sat_GDP_physical_integrity_rights, y_max = 1)
+
+generate_supplementary_information(model_GDP_gini, vcov_GDP_gini, data = data_GDP_gini, pred = "GDP_PPP", resp = "gini_index", y.label = "Gini index", percentage = FALSE, reverse = TRUE, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_social_services, vcov = vcov_GDP_social_services, model_sat = model_GDP_social_services_sat, vcov_sat = vcov_GDP_social_services_sat, data = data_GDP_social_services, pred = "GDP_PPP", resp = "social_services", y.label = "Social services quality", percentage = FALSE, reverse = FALSE, sat = sat_GDP_social_services, y_max = 1)
+
+generate_supplementary_information(model = model_GDP_women_parliament, vcov = vcov_GDP_women_parliament, data = data_GDP_women_parliament, pred = "GDP_PPP", resp = "women_parliament", y.label = "Female parliament members", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_female_labour, vcov = vcov_GDP_female_labour, data = data_GDP_female_labour, pred = "GDP_PPP", resp = "female_labour", y.label = "Female labour force participation", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_female_labour_income, vcov = vcov_GDP_female_labour_income, data = data_GDP_female_labour_income, pred = "GDP_PPP", resp = "female_labour_income", y.label = "Female labour income share", percentage = TRUE, reverse = FALSE, y_max = NA)
+
+generate_supplementary_information(model = model_GDP_adolescent_pregnancies, vcov = vcov_GDP_adolescent_pregnancies, data = data_GDP_adolescent_pregnancies, pred = "GDP_PPP", resp = "adolescent_pregnancies", y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE, y_max = NA)
+
+```
+
+
+
