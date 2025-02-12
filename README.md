@@ -22,8 +22,8 @@ A key challenge for the 21st century is to achieve good social outcomes for all 
 
 ## Contents of this repository
 
-*   [data](data): raw data from public sources, our main dataset with time series for each country, the aggregated datasets for each analysis
 *   [code](code): data preparation, analysis notebooks, utility functions
+*   [data](data): raw data from public sources, our main dataset with time series for each country, the aggregated datasets for each analysis
 *   [figures](figures): empty, expected by scripts to store generated plots and tables
 *   [renv](renv): contains the configuration of the exact environment (R and package versions) needed to reproduce the results
 
