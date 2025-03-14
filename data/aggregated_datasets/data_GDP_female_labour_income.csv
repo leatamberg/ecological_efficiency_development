@@ -30,7 +30,7 @@ COL,Colombia,capitalist_periphery,5805.3444383125,35.39
 COM,Comoros,capitalist_periphery,994.43761209375,19.51
 CPV,Cape Verde,capitalist_periphery,1461.66585403125,30.81
 CRI,Costa Rica,capitalist_periphery,6451.3863196875,24.64
-CSK,Czechoslovakia,socialist,11346.801025625,39.588672
+CSK,Czechoslovakia,socialist,11346.801025625,39.588672017039336
 CUB,Cuba,socialist,3875.78955390625,27.950000000000003
 CYP,Cyprus,capitalist_periphery,8390.3163865625,30.58
 DEU,Germany,capitalist_core,19685.6862596875,30.39
@@ -113,7 +113,7 @@ SEN,Senegal,capitalist_periphery,2186.7070611875,15.37
 SGP,Singapore,capitalist_periphery,11008.3963340625,27.94
 SLE,Sierra Leone,capitalist_periphery,1483.7933998125,24.32
 SLV,El Salvador,capitalist_periphery,3520.45550309375,25.53
-SUN,USSR,socialist,9338.6641609375,37.3771461
+SUN,USSR,socialist,9338.6641609375,37.36790480260696
 SWE,Sweden,capitalist_core,21768.8135821875,38.879999999999995
 SWZ,Swaziland,capitalist_periphery,2351.13405703125,35.510000000000005
 SYR,Syria,capitalist_periphery,7885.69133096875,10.72
@@ -131,7 +131,7 @@ USA,United States,capitalist_core,27356.62367625,34.13
 VEN,Venezuela,capitalist_periphery,14688.266421562501,27.56
 VNM,Vietnam,socialist,1341.91124671875,34.9
 YEM,Yemen,revolutionary,2793.27886384375,7.539999999999999
-YUG,Yugoslavia,socialist,7646.49874496875,37.45657
+YUG,Yugoslavia,socialist,7646.49874496875,37.41640351000809
 ZAF,South Africa,capitalist_periphery,6250.93439240625,26.88
 ZMB,Zambia,capitalist_periphery,1510.89848534375,22.12
 ZWE,Zimbabwe,revolutionary,1953.28922934375,21.99

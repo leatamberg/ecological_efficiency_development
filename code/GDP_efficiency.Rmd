@@ -66,8 +66,8 @@ data_all <- read_csv("../data/data_all.csv",
   years_schooling = col_double(),
   former_state = col_character(),
   electricity_access = col_double(),
-  adolescent_pregnancies = col_double(),
-  doctors = col_double(),
+  adolescent_fertility = col_double(),
+  physicians = col_double(),
   female_labour = col_double(),
   gini_index = col_double(),
   hospital_beds = col_double(),
@@ -1056,44 +1056,44 @@ interact_plot_custom(model_GDP_infant_mortality_sat,
 
 
 
-## Doctors
+## Physicians
 
 build cross-sectional dataset
 
 ```{r}
-data_GDP_doctors <- 
+data_GDP_physicians <- 
   data_all %>% 
-    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "doctors") %>%
+    cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "physicians") %>%
   former_states() %>% 
   update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
   drop_na()
-write_csv(data_GDP_doctors, "../data/aggregated_datasets/data_GDP_doctors.csv")
+write_csv(data_GDP_physicians, "../data/aggregated_datasets/data_GDP_physicians.csv")
 
 writeLines("\nSocialist countries included:")
-data_GDP_doctors %>% filter(regime_type == "socialist") %>% pull(country_name)
+data_GDP_physicians %>% filter(regime_type == "socialist") %>% pull(country_name)
 ```
 
 ### logarithmic curves
 
 ```{r}
-model_GDP_doctors <- lm(doctors ~ regime_type*log(GDP_PPP), 
-                        data = data_GDP_doctors)
-vcov_GDP_doctors <- vcovHC(model_GDP_doctors, type = "HC3")
+model_GDP_physicians <- lm(physicians ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_physicians)
+vcov_GDP_physicians <- vcovHC(model_GDP_physicians, type = "HC3")
 
-parameters(model_GDP_doctors, vcov = vcov_GDP_doctors)
+parameters(model_GDP_physicians, vcov = vcov_GDP_physicians)
 ```
 ```{r}
-summary(model_GDP_doctors)
+summary(model_GDP_physicians)
 ```
 
 
 ```{r}
-plot(model_GDP_doctors)
+plot(model_GDP_physicians)
 ```
 
 ```{r}
-ggintplot_categorical_moderator(obj = model_GDP_doctors, 
-                                vcov = vcov_GDP_doctors,
+ggintplot_categorical_moderator(obj = model_GDP_physicians, 
+                                vcov = vcov_GDP_physicians,
                                 pred = "log(GDP_PPP)", 
                                 categorical_moderator = "regime_type", 
                                 levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
@@ -1101,8 +1101,8 @@ ggintplot_categorical_moderator(obj = model_GDP_doctors,
 ```
 
 ```{r}
-ggintplot(obj = model_GDP_doctors, 
-          vcov = vcov_GDP_doctors,
+ggintplot(obj = model_GDP_physicians, 
+          vcov = vcov_GDP_physicians,
           varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
           title = TRUE, 
           rug = TRUE, 
@@ -1114,8 +1114,8 @@ ggintplot(obj = model_GDP_doctors,
 ```
 
 ```{r}
-ggintplot(obj = model_GDP_doctors, 
-          vcov = vcov_GDP_doctors,
+ggintplot(obj = model_GDP_physicians, 
+          vcov = vcov_GDP_physicians,
           varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
           title = TRUE, 
           rug = TRUE,
@@ -1125,26 +1125,26 @@ ggintplot(obj = model_GDP_doctors,
 ```
 
 ```{r}
-interact_plot_custom(model_GDP_doctors, 
-              vcov = vcov_GDP_doctors,
+interact_plot_custom(model_GDP_physicians, 
+              vcov = vcov_GDP_physicians,
               pred = "GDP_PPP",
               
-              data = data_GDP_doctors, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Doctors per person", 
+              data = data_GDP_physicians, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Physicians per 1000 people", 
               ) 
 ```
 
 
 ### saturation curves
 ```{r}
-sat_GDP_doctors <- data_GDP_doctors$doctors %>% max() * 1.1
-model_GDP_doctors_sat <- lm(log(sat_GDP_doctors - doctors) ~ regime_type*log(GDP_PPP),
-                        data = data_GDP_doctors)
-vcov_GDP_doctors_sat <- vcovHC(model_GDP_doctors_sat, type = "HC3")
+sat_GDP_physicians <- data_GDP_physicians$physicians %>% max() * 1.1
+model_GDP_physicians_sat <- lm(log(sat_GDP_physicians - physicians) ~ regime_type*log(GDP_PPP),
+                        data = data_GDP_physicians)
+vcov_GDP_physicians_sat <- vcovHC(model_GDP_physicians_sat, type = "HC3")
 
-summary(model_GDP_doctors_sat)
+summary(model_GDP_physicians_sat)
 ```
 
---> In the case of doctors, the fit is not better for a saturation curve (tested different saturation levels, does not change the pattern)
+--> In the case of physicians, the fit is not better for a saturation curve (tested different saturation levels, does not change the pattern)
 --> This is not surprising given the plot for log curves, which actually shows quite a good fit already
 
 
@@ -1236,7 +1236,7 @@ vcov_GDP_hospital_beds_sat <- vcovHC(model_GDP_hospital_beds_sat, type = "HC3")
 
 summary(model_GDP_hospital_beds_sat)
 ```
---> same as for doctors, fit gets worse
+--> same as for physicians, fit gets worse
 
 
 
@@ -1809,23 +1809,6 @@ build cross-section
 data_GDP_gini <- 
   data_all %>% 
   cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "gini_index") %>% 
-  mutate(gini_index = # fill missing values for certain socialist countries with next year available
-           case_match(
-             country_name,
-             "Poland"  ~ 
-               data_all %>% 
-               filter(country_name == "Poland", year == 1983) %>% 
-               pull(gini_index) %>% magrittr::extract(1),
-             "Bulgaria" ~
-               data_all %>% 
-               filter(country_name == "Bulgaria", year == 1989) %>% 
-               pull(gini_index) %>% magrittr::extract(1),
-             "Romania" ~
-               data_all %>% 
-               filter(country_name == "Romania", year == 1989) %>% 
-               pull(gini_index) %>% magrittr::extract(1),
-             .default = gini_index)
-         ) %>% 
   former_states() %>% 
   update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
   drop_na() %>% 
@@ -2083,7 +2066,7 @@ parameters(model_regime_women_parliament, vcov = vcov_regime_women_parliament)
 
 
 
-## Female labour force participation
+## Female labour force share
 
 build cross-section
 
@@ -2145,7 +2128,7 @@ ggintplot(obj = model_GDP_female_labour,
 
 ```{r}
 interact_plot_custom(model_GDP_female_labour, 
-                                vcov = vcov_GDP_female_labour, pred = "GDP_PPP",data = data_GDP_female_labour, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Female labour force participation", ) 
+                                vcov = vcov_GDP_female_labour, pred = "GDP_PPP",data = data_GDP_female_labour, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Female labour force share", ) 
 ```
 
 ### only regime type
@@ -2257,33 +2240,33 @@ parameters(model_regime_female_labour_income, vcov = vcov_regime_female_labour_i
 build cross-section
 
 ```{r}
-data_GDP_adolescent_pregnancies <- 
+data_GDP_adolescent_fertility <- 
   data_all %>% 
-  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "adolescent_pregnancies") %>% 
+  cross_section(start_average = 1960, end_average = 1980, year_outcome = 1980, outcome_variable = "adolescent_fertility") %>% 
   former_states() %>% 
   update_regime_types(granularity = 4, reference_regime = "capitalist_periphery", regime_vietnam = "socialist") %>% 
   drop_na()
-write_csv(data_GDP_adolescent_pregnancies, "../data/aggregated_datasets/data_GDP_adolescent_pregnancies.csv")
+write_csv(data_GDP_adolescent_fertility, "../data/aggregated_datasets/data_GDP_adolescent_fertility.csv")
 
 
 writeLines("\nSocialist countries included:")
-data_GDP_adolescent_pregnancies %>% filter(regime_type == "socialist") %>% pull(country_name)
+data_GDP_adolescent_fertility %>% filter(regime_type == "socialist") %>% pull(country_name)
 ```
 
 ### logarithmic curves
 
 ```{r}
-model_GDP_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type*log(GDP_PPP), 
-                        data = data_GDP_adolescent_pregnancies)
+model_GDP_adolescent_fertility <- lm(adolescent_fertility ~ regime_type*log(GDP_PPP), 
+                        data = data_GDP_adolescent_fertility)
 
-vcov_GDP_adolescent_pregnancies <- vcovHC(model_GDP_adolescent_pregnancies, type = "HC3")
+vcov_GDP_adolescent_fertility <- vcovHC(model_GDP_adolescent_fertility, type = "HC3")
 
-parameters(model_GDP_adolescent_pregnancies, vcov = vcov_GDP_adolescent_pregnancies)
+parameters(model_GDP_adolescent_fertility, vcov = vcov_GDP_adolescent_fertility)
 ```
 
 ```{r}
-ggintplot_categorical_moderator(obj = model_GDP_adolescent_pregnancies, 
-                                vcov = vcov_GDP_adolescent_pregnancies,
+ggintplot_categorical_moderator(obj = model_GDP_adolescent_fertility, 
+                                vcov = vcov_GDP_adolescent_fertility,
                                 pred = "log(GDP_PPP)", 
                                 categorical_moderator = "regime_type", 
                                 levels = list("capitalist_periphery", "capitalist_core", "revolutionary", "socialist"),
@@ -2291,8 +2274,8 @@ ggintplot_categorical_moderator(obj = model_GDP_adolescent_pregnancies,
 ```
 
 ```{r}
-ggintplot(obj = model_GDP_adolescent_pregnancies, 
-                                vcov = vcov_GDP_adolescent_pregnancies, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
+ggintplot(obj = model_GDP_adolescent_fertility, 
+                                vcov = vcov_GDP_adolescent_fertility, varnames = c("regime_typesocialist", "log(GDP_PPP)"), varlabs=c("socialist regime type", "GDP ($ PPP)"),
           title = TRUE, 
           rug = TRUE, 
           twoways = FALSE, 
@@ -2303,8 +2286,8 @@ ggintplot(obj = model_GDP_adolescent_pregnancies,
 ```
 
 ```{r}
-ggintplot(obj = model_GDP_adolescent_pregnancies, 
-                                vcov = vcov_GDP_adolescent_pregnancies, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
+ggintplot(obj = model_GDP_adolescent_fertility, 
+                                vcov = vcov_GDP_adolescent_fertility, varnames = c("regime_typecapitalist_core", "log(GDP_PPP)"), varlabs=c("capitalist core regime type", "GDP (PPP, log-transformed)"),
           title = TRUE, 
           rug = TRUE,
           rugwidth = 0.5,
@@ -2313,19 +2296,19 @@ ggintplot(obj = model_GDP_adolescent_pregnancies,
 ```
 
 ```{r}
-interact_plot_custom(model_GDP_adolescent_pregnancies, 
-                                vcov = vcov_GDP_adolescent_pregnancies, pred = "GDP_PPP",data = data_GDP_adolescent_pregnancies, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Adolescent pregnancy rate", ) 
+interact_plot_custom(model_GDP_adolescent_fertility, 
+                                vcov = vcov_GDP_adolescent_fertility, pred = "GDP_PPP",data = data_GDP_adolescent_fertility, insignificant_lines = "dashed", x.label = "GDP (PPP)", y.label = "Adolescent fertility rate", ) 
 ```
 
 
 ### only regime type
 ```{r}
-model_regime_adolescent_pregnancies <- lm(adolescent_pregnancies ~ regime_type, 
-                        data = data_GDP_adolescent_pregnancies)
+model_regime_adolescent_fertility <- lm(adolescent_fertility ~ regime_type, 
+                        data = data_GDP_adolescent_fertility)
 
-vcov_regime_adolescent_pregnancies <- vcovHC(model_regime_adolescent_pregnancies, type = "HC3")
+vcov_regime_adolescent_fertility <- vcovHC(model_regime_adolescent_fertility, type = "HC3")
 
-parameters(model_regime_adolescent_pregnancies, vcov = vcov_regime_adolescent_pregnancies)
+parameters(model_regime_adolescent_fertility, vcov = vcov_regime_adolescent_fertility)
 ```
 
 
@@ -2521,7 +2504,7 @@ interact_plot_child_mortality <- do.call(interact_plot_custom, c(list(model_GDP_
 interact_plot_infant_mortality <- do.call(interact_plot_custom, c(list(model_GDP_infant_mortality_sat, vcov_GDP_infant_mortality_sat, data_GDP_infant_mortality, y.label = "Infant mortality rate", reverse = TRUE, percentage = TRUE, resp = "infant_mortality", saturation_level = sat_GDP_infant_mortality), argument_list_GDP))
 
 
-interact_plot_doctors <- do.call(interact_plot_custom, c(list(model_GDP_doctors, vcov_GDP_doctors, data_GDP_doctors, y.label = "Doctors per 1000 people"), argument_list_GDP))
+interact_plot_physicians <- do.call(interact_plot_custom, c(list(model_GDP_physicians, vcov_GDP_physicians, data_GDP_physicians, y.label = "Physicians per 1000 people"), argument_list_GDP))
 
 interact_plot_hospital_beds <- do.call(interact_plot_custom, c(list(model_GDP_hospital_beds, vcov_GDP_hospital_beds, data_GDP_hospital_beds, y.label = "Hospital beds per 1000 people"), argument_list_GDP))
 
@@ -2530,12 +2513,12 @@ interact_plot_literacy <- do.call(interact_plot_custom, c(list(model_GDP_literac
 
 interact_plot_social_services <- do.call(interact_plot_custom, c(list(model_GDP_social_services_sat, vcov_GDP_social_services_sat, data_GDP_social_services, y.label = "Social services quality",  resp = "social_services", sat_GDP_social_services), argument_list_GDP))
 
-interact_plot_female_labour <- do.call(interact_plot_custom, c(list(model_GDP_female_labour, vcov_GDP_female_labour, data_GDP_female_labour, y.label = "Female labour force participation", percentage = TRUE), argument_list_GDP))
+interact_plot_female_labour <- do.call(interact_plot_custom, c(list(model_GDP_female_labour, vcov_GDP_female_labour, data_GDP_female_labour, y.label = "Female labour force share", percentage = TRUE), argument_list_GDP))
 
 interact_plot_female_labour_income <- do.call(interact_plot_custom, c(list(model_GDP_female_labour_income, vcov_GDP_female_labour_income, data_GDP_female_labour_income, y.label = "Female labour income share", percentage = TRUE), argument_list_GDP))
 
 
-interact_plot_adolescent_pregnancies <- do.call(interact_plot_custom, c(list(model_GDP_adolescent_pregnancies, vcov_GDP_adolescent_pregnancies, data_GDP_adolescent_pregnancies, y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE), argument_list_GDP))
+interact_plot_adolescent_fertility <- do.call(interact_plot_custom, c(list(model_GDP_adolescent_fertility, vcov_GDP_adolescent_fertility, data_GDP_adolescent_fertility, y.label = "Adolescent fertility rate", percentage = TRUE, reverse = TRUE), argument_list_GDP))
 ```
 
 ```{r}
@@ -2549,7 +2532,7 @@ ggarrange(
     theme(axis.title.x = element_blank()), 
   interact_plot_infant_mortality + 
     theme(axis.title.x = element_blank()),
-  interact_plot_doctors,
+  interact_plot_physicians,
   interact_plot_hospital_beds, 
   nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
 
@@ -2565,7 +2548,7 @@ ggarrange(
   interact_plot_female_labour +
     theme(axis.title.x = element_blank()),
   interact_plot_female_labour_income,
-  interact_plot_adolescent_pregnancies,
+  interact_plot_adolescent_fertility,
   nrow = 3, ncol = 2, common.legend = TRUE, align = "v")  
 
 ggsave(file = "../figures/trellis_gdp_extended_data_2.pdf", width = 180, height = 223, units = "mm", device=cairo_pdf)
@@ -2586,7 +2569,7 @@ generate_supplementary_information(model = model_GDP_child_mortality, vcov = vco
 
 generate_supplementary_information(model = model_GDP_infant_mortality, vcov = vcov_GDP_infant_mortality, model_sat = model_GDP_infant_mortality_sat, vcov_sat = vcov_GDP_infant_mortality_sat, data = data_GDP_infant_mortality, pred = "GDP_PPP", resp = "infant_mortality", y.label = "Infant mortality rate", percentage = TRUE, reverse = TRUE, sat = sat_GDP_infant_mortality, y_max = NA, y_min = 0)
 
-generate_supplementary_information(model = model_GDP_doctors, vcov = vcov_GDP_doctors, model_sat = model_GDP_doctors_sat, vcov_sat = vcov_GDP_doctors_sat, data = data_GDP_doctors, pred = "GDP_PPP", resp = "doctors", y.label = "Doctors per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_GDP_doctors, y_max = NA)
+generate_supplementary_information(model = model_GDP_physicians, vcov = vcov_GDP_physicians, model_sat = model_GDP_physicians_sat, vcov_sat = vcov_GDP_physicians_sat, data = data_GDP_physicians, pred = "GDP_PPP", resp = "physicians", y.label = "Physicians per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_GDP_physicians, y_max = NA)
 
 generate_supplementary_information(model = model_GDP_hospital_beds, vcov = vcov_GDP_hospital_beds, model_sat = model_GDP_hospital_beds_sat, vcov_sat = vcov_GDP_hospital_beds_sat, data = data_GDP_hospital_beds, pred = "GDP_PPP", resp = "hospital_beds", y.label = "Hospital beds per 1000 people", percentage = FALSE, reverse = FALSE, sat = sat_GDP_hospital_beds, y_max = NA)
 
@@ -2614,11 +2597,11 @@ generate_supplementary_information(model = model_GDP_social_services, vcov = vco
 
 generate_supplementary_information(model = model_GDP_women_parliament, vcov = vcov_GDP_women_parliament, data = data_GDP_women_parliament, pred = "GDP_PPP", resp = "women_parliament", y.label = "Female parliament members", percentage = TRUE, reverse = FALSE, y_max = NA)
 
-generate_supplementary_information(model = model_GDP_female_labour, vcov = vcov_GDP_female_labour, data = data_GDP_female_labour, pred = "GDP_PPP", resp = "female_labour", y.label = "Female labour force participation", percentage = TRUE, reverse = FALSE, y_max = NA)
+generate_supplementary_information(model = model_GDP_female_labour, vcov = vcov_GDP_female_labour, data = data_GDP_female_labour, pred = "GDP_PPP", resp = "female_labour", y.label = "Female labour force share", percentage = TRUE, reverse = FALSE, y_max = NA)
 
 generate_supplementary_information(model = model_GDP_female_labour_income, vcov = vcov_GDP_female_labour_income, data = data_GDP_female_labour_income, pred = "GDP_PPP", resp = "female_labour_income", y.label = "Female labour income share", percentage = TRUE, reverse = FALSE, y_max = NA)
 
-generate_supplementary_information(model = model_GDP_adolescent_pregnancies, vcov = vcov_GDP_adolescent_pregnancies, data = data_GDP_adolescent_pregnancies, pred = "GDP_PPP", resp = "adolescent_pregnancies", y.label = "Adolescent pregnancy rate", percentage = TRUE, reverse = TRUE, y_max = NA)
+generate_supplementary_information(model = model_GDP_adolescent_fertility, vcov = vcov_GDP_adolescent_fertility, data = data_GDP_adolescent_fertility, pred = "GDP_PPP", resp = "adolescent_fertility", y.label = "Adolescent fertility rate", percentage = TRUE, reverse = TRUE, y_max = NA)
 
 ```
 

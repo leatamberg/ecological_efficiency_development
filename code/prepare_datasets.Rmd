@@ -16,7 +16,33 @@ source(PATH_HELPER_FUNCTIONS)
 source("helper_functions_ecological_efficiency.R")
 
 ```
+```{r}
+# helper function to add values for former states by calculating a population-weighted average of successor states
 
+add_former_states <- function(data, variable){
+  
+  data_former_states <-
+    data %>%
+    left_join(regime_type %>% select(country_code, former_state)) %>%
+    left_join(population) %>% 
+    filter(!is.na(former_state)) %>%
+    group_by(former_state, year) %>%
+    mutate(population_weight = population/sum(population, na.rm = TRUE)) %>%
+    summarise(variable_former_state = weighted.mean(!!sym(variable), population_weight, na.rm = TRUE)) %>%
+    mutate(former_state = case_match(former_state,
+                                     "CSK" ~ "CSK",
+                                     "USSR" ~ "SUN",
+                                     "Yugo" ~ "YUG")) %>%
+    select(country_code = former_state, year, variable_former_state)
+  
+  data <-
+    data %>%
+    full_join(data_former_states, by = c("country_code", "year")) %>%
+    mutate("{variable}" := coalesce(!!sym(variable), variable_former_state)) %>%
+    select(country_code, year, !!sym(variable))
+
+}
+```
 
 # Get data from different sources
 
@@ -53,7 +79,7 @@ dev.off()
 
 ### Population
 ```{r}
-population <- read_csv("../data/raw_data/population_size_worldbank.csv") %>% select(country_code = `Country Code`, year = Time, population = `Population, total [SP.POP.TOTL]`) %>% left_join(regime_type %>% select(country_code, former_state))
+population <- read_csv("../data/raw_data/population_size_countries.csv") %>% select(country_code = `Country Code`, year = Time, population = `Population, total [SP.POP.TOTL]`) %>% left_join(regime_type %>% select(country_code, former_state))
  
 # get population for former states by summing up successor states 
 population_former_states <- 
@@ -76,7 +102,7 @@ population <-
   
 ```
 ```{r}
-world_population <- read_excel("../data/raw_data/world_population_world_bank.xlsx") %>% select(year = Time, population = `World [WLD]`) %>% drop_na()
+world_population <- read_excel("../data/raw_data/population_size_world.xlsx") %>% select(year = Time, population = `World [WLD]`) %>% drop_na()
 ```
 
 
@@ -108,7 +134,7 @@ Needs to be redone for Sudan and Ethopia if more recent values are needed (due t
 
 ```{r}
 material_footprint <- 
-  read_excel("../data/raw_data/MF_distributed (multiple ratios).xlsx", 
+  read_excel("../data/raw_data/material_footprint.xlsx", 
     sheet = "MF_original") %>% 
   pivot_longer(`1970`:`2019`, names_to = "year", names_transform = as.integer, values_to = "material_footprint") %>% 
   #filter(!iso %in% c("ETH", "SDN")) %>% 
@@ -131,7 +157,7 @@ material_footprint <-
 try out difference between averaging per capita and dividing total sum by population sum
 ```{r}
 test_aggregation_methods <- 
-    read_excel("../data/raw_data/MF_distributed (multiple ratios).xlsx", 
+    read_excel("../data/raw_data/material_footprint.xlsx", 
     sheet = "MF_original") %>% 
   pivot_longer(`1970`:`2019`, names_to = "year", names_transform = as.integer, values_to = "material_footprint") %>% 
   #filter(!iso %in% c("ETH", "SDN")) %>% 
@@ -181,48 +207,36 @@ The difference is negligible.
 
 GCP based
 ```{r}
-co2 <- read_excel("../data/raw_data/CO2 data.xlsx", sheet = "Estimated consumption (M90-94)", skip = 11) %>%
+co2_old <- read_excel("../data/raw_data/co2_old.xlsx", sheet = "Estimated consumption (M90-94)", skip = 11) %>%
   rename(year = `...1`) %>% 
-  pivot_longer(Afghanistan:Zimbabwe, names_to = "country_name", values_to = "co2") %>%
+  pivot_longer(Afghanistan:Zimbabwe, names_to = "country_name", values_to = "co2_old") %>%
   mutate(country_code = countrycode(country_name, origin = "country.name", destination = "iso3c")) %>%
-  select(country_code, year, co2) %>% 
+  select(country_code, year, co2_old) %>% 
   left_join(population, by = c("country_code", "year")) %>% 
-  mutate(co2 = co2/population) %>% 
-  select(country_code, year, co2, population) %>% 
+  mutate(co2_old = co2_old/population) %>% # get per capita values
+  select(country_code, year, co2_old, population) %>% 
   drop_na() %>% 
-  filter(co2 != 0) %>% 
-  mutate(co2 = co2*1000000*3.664) %>%  # change to tons as this is a better unit for per capita numbers, and multiply by 3.664 to turn tons of carbon into tons of co2
-  left_join(regime_type %>% select(country_code, former_state)) 
+  filter(co2_old != 0) %>% 
+  mutate(co2_old = co2_old*1000000*3.664) %>%  # change to tons as this is a better unit for per capita numbers, and multiply by 3.664 to turn tons of carbon into tons of co2_old
+  add_former_states("co2_old") %>% 
+  drop_na()
+  
 
-# get co2 emissions for former states by calculating a weighted average of successor states
-# (have to go this way because Macedonia has no co2 data available, so we cannot simply sum emissions up)
-  co2_former_states <-
-  co2 %>%
-  filter(!is.na(former_state)) %>%
-  group_by(former_state, year) %>%
-  mutate(population_weight = population/sum(population, na.rm = TRUE)) %>%
-  summarise(co2 = weighted.mean(co2, population_weight)) %>%
-  mutate(country_code = case_match(former_state,
-                                   "CSK" ~ "CSK",
-                                   "USSR" ~ "SUN",
-                                   "Yugo" ~ "YUG")) %>%
-  select(country_code, year, co2) 
-
-co2 <-
-  bind_rows(co2, co2_former_states) %>%
-  select(country_code, year, co2)
 
 ```
 
 #### new
 
 ```{r}
-co2_new_source <- read_excel("../data/raw_data/CO2_PRIMAP-based_1850-2019.xlsx") %>%
+co2_source <- 
+  read_excel("../data/raw_data/CO2.xlsx") %>%
   rename(year = date) %>% 
-  pivot_longer(Afghanistan:Zimbabwe, names_to = "country_name", values_to = "co2")
-
-co2_new <-  co2_new_source %>%
-  mutate(country_code = countrycode(country_name, origin = "country.name", destination = "iso3c")) %>%
+  pivot_longer(Afghanistan:Zimbabwe, names_to = "country_name", values_to = "co2") %>% 
+  mutate(country_code = countrycode(country_name, origin = "country.name", destination = "iso3c"))
+  
+  
+co2 <- 
+  co2_source %>% 
   select(country_code, year, co2) %>% 
   left_join(population, by = c("country_code", "year")) %>% 
   mutate(co2 = co2/population) %>% 
@@ -230,30 +244,12 @@ co2_new <-  co2_new_source %>%
   replace_na(list(co2 = 0)) %>% 
   drop_na() %>% 
   mutate(co2 = co2*1000) %>%  # change to tons as this is a better unit for per capita numbers
-  left_join(regime_type %>% select(country_code, former_state)) 
-
-# get co2 emissions for former states by calculating a weighted average of successor states
-# missing countries: Serbia has gap between 1970 and 1990; completely missing: Belarus, Estonia --> therefore cannot just sum emissions up, instead we assume that the missing country follows the average per capita emissions of the other countries
-  co2_new_former_states <-
-  co2_new %>%
-  filter(!is.na(former_state)) %>%
-  group_by(former_state, year) %>%
-  mutate(population_weight = population/sum(population, na.rm = TRUE)) %>%
-  summarise(co2 = weighted.mean(co2, population_weight)) %>%
-  mutate(country_code = case_match(former_state,
-                                   "CSK" ~ "CSK",
-                                   "USSR" ~ "SUN",
-                                   "Yugo" ~ "YUG")) %>%
-  select(country_code, year, co2)
-
-co2_new <-
-  bind_rows(co2_new, co2_new_former_states) %>%
-  rename(co2_new = co2) %>% 
-  select(country_code, year, co2_new)
+  add_former_states("co2") %>% 
+  drop_na()
 
 ```
 <!-- # ```{r} -->
-<!-- # data_co2_time_series <- co2_new %>% pivot_wider(names_from = country_code, values_from = co2_new) -->
+<!-- # data_co2_time_series <- co2 %>% pivot_wider(names_from = country_code, values_from = co2) -->
 <!-- #  -->
 <!-- # write_csv(data_co2_time_series, "../data/raw_data/data_co2_time_series_per_capita.csv") -->
 <!-- #  -->
@@ -266,17 +262,17 @@ co2_new <-
 correlation between two different co2 data sources
 
 ```{r}
-co2 %>% left_join(co2_new, by = c("country_code", "year")) %>% summarise(correlation = cor(co2_new, co2, use="complete.obs"))
+co2 %>% left_join(co2_old, by = c("country_code", "year")) %>% summarise(correlation = cor(co2_old, co2, use="complete.obs"))
 ```
 in aggregated version:
 
 ```{r}
 co2 %>% 
-  left_join(co2_new, by = c("country_code", "year")) %>% 
+  left_join(co2_old, by = c("country_code", "year")) %>% 
   filter(year>=1960 & year <= 1980) %>% 
   group_by(country_code) %>%  
-  dplyr::summarise(across(c(co2, co2_new), ~ mean(.,na.rm = TRUE))) %>% 
-  summarise(correlation = cor(co2_new, co2, use="complete.obs"))
+  dplyr::summarise(across(c(co2, co2_old), ~ mean(.,na.rm = TRUE))) %>% 
+  summarise(correlation = cor(co2_old, co2, use="complete.obs"))
 ```
 --> On the aggregation level we are using, the correlation between the two sources is quite high. As we trust the second version more, we stick to it (when switching, we did not see any changes in results)
 
@@ -285,8 +281,7 @@ try out difference between averaging per capita and dividing total sum by popula
 
 ```{r}
 test_aggregation_methods_co2 <-
-  co2_new_source %>%
-  mutate(country_code = countrycode(country_name, origin = "country.name", destination = "iso3c")) %>%
+  co2_source %>%
   select(country_code, year, co2) %>% 
   left_join(population, by = c("country_code", "year")) %>% 
   filter(year>=1959, year<1991) %>%
@@ -308,93 +303,140 @@ we take the emissions between 1960 and 1988, the latter being the year in which 
 
 1981
 ```{r}
-co2_new_source %>% filter(year>=1960, year<=1988, country_name == "World") %>% mutate(co2 = co2*1000) %>% pull(co2) %>% sum() / world_population %>% filter(year>=1960, year<=1981) %>% pull(population) %>%  sum(na.rm = TRUE) 
+co2_source %>% filter(year>=1960, year<=1988, country_name == "World") %>% mutate(co2 = co2*1000) %>% pull(co2) %>% sum() / world_population %>% filter(year>=1960, year<=1981) %>% pull(population) %>%  sum(na.rm = TRUE) 
 
 ```
 1990
 ```{r}
-co2_new_source %>% filter(year>=1960, year<=1988, country_name == "World") %>% mutate(co2 = co2*1000) %>% pull(co2) %>% sum() / world_population %>% filter(year>=1960, year<=1990) %>% pull(population) %>%  sum(na.rm = TRUE) 
+co2_source %>% filter(year>=1960, year<=1988, country_name == "World") %>% mutate(co2 = co2*1000) %>% pull(co2) %>% sum() / world_population %>% filter(year>=1960, year<=1990) %>% pull(population) %>%  sum(na.rm = TRUE) 
 
 ```
 
 
 ## Dependent variables
+
 ### Basic needs
 
 ```{r}
-poverty_rate <- read_csv("../data/raw_data/BNPL_rate.csv") %>% 
-  pivot_longer(`1820`:`2018`, names_to = "year", 
+poverty_rate <- 
+  read_csv("../data/raw_data/outcome_variables/1_basic_needs_poverty_rate.csv") %>% 
+  pivot_longer(`1980`:`2018`, names_to = "year", 
                names_transform = as.integer, values_to = "poverty_rate") %>%
   rename(country_code = iso) %>% select(-`Country Name`) %>%  drop_na() %>% 
+  add_former_states("poverty_rate") %>% 
   mutate(poverty_rate = poverty_rate*100) # transform into percentages
-
-# part below no longer necessary as we realised that data for former state is already available
-#   left_join(regime_type %>% select(country_code, former_state)) %>%
-#   left_join(population)
-# 
-# # get poverty rate for former states by calculating a weighted average of successor states 
-# poverty_former_states <- 
-#   poverty_rate %>% 
-#   filter(!is.na(former_state)) %>% 
-#   group_by(former_state, year) %>% 
-#   mutate(population_weight = population/sum(population, na.rm = TRUE)) %>% 
-#   summarise(poverty_former_state = weighted.mean(poverty_rate, population_weight)) %>% 
-#   mutate(former_state = case_match(former_state,
-#                                    "CSK" ~ "CSK",
-#                                    "USSR" ~ "SUN",
-#                                    "Yugo" ~ "YUG")) %>% 
-#   select(country_code = former_state, year, poverty_former_state)
-#   
-# poverty_rate <- 
-#   poverty_rate %>% 
-#   full_join(poverty_former_states, by = c("country_code", "year")) %>% 
-#   mutate(poverty_rate = coalesce(poverty_rate, poverty_former_state)) %>% 
-#   select(country_code, year, poverty_rate)
-  
 ```
 
 
 
 ```{r}
 
-death_rate_malnutrition <- read_csv("../data/raw_data/death_rate_malnutrition_GBDS.csv") %>% pivot_longer(`1990`:`2019`, names_to = "year", names_transform = as.integer, values_to = "death_rate_malnutrition") %>% rename(country_code = iso) %>% drop_na()%>% mutate(death_rate_malnutrition = death_rate_malnutrition/1000)
+death_rate_malnutrition <- 
+  read_csv("../data/raw_data/outcome_variables/2_malnutrition_death_rate.csv") %>% 
+  pivot_longer(`1990`:`2019`, names_to = "year", names_transform = as.integer, values_to = "death_rate_malnutrition") %>% 
+  rename(country_code = iso) %>% 
+  drop_na() %>% 
+  add_former_states("death_rate_malnutrition") %>% 
+  mutate(death_rate_malnutrition = death_rate_malnutrition/1000) # transform into percentages
 
-calorie_availability <- read_csv("../data/raw_data/calorie_availability_per_personday.csv") %>% pivot_longer(`1961`:`2013`, names_to = "year", names_transform = as.integer, values_to = "calorie_availability") %>% rename(country_code = iso) %>% drop_na() 
+calorie_availability <- 
+  read_csv("../data/raw_data/outcome_variables/3_daily_calorie_availability_per_person.csv") %>% 
+  pivot_longer(`1961`:`2013`, names_to = "year", names_transform = as.integer, values_to = "calorie_availability") %>% 
+  rename(country_code = iso) %>% 
+  drop_na() 
 
 ```
 ### Health
 
 ```{r}
-life_expect <- read_csv("../data/raw_data/life_expec_WPP.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "life_expect") %>% rename(country_code = iso) %>% drop_na()
+life_expect <- read_csv("../data/raw_data/outcome_variables/4_life_expectancy.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "life_expect") %>% rename(country_code = iso) %>% drop_na() %>% add_former_states("life_expect")
 
-child_mortality <- read_csv("../data/raw_data/child_mortality_WPP.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "child_mortality") %>% rename(country_code = iso) %>% drop_na() %>% 
+child_mortality <- read_csv("../data/raw_data/outcome_variables/5_child_death_rate.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "child_mortality") %>% rename(country_code = iso) %>% drop_na() %>% 
+  add_former_states("child_mortality") %>% 
   mutate(child_mortality = child_mortality/10) #transform into percentages
 
-infant_mortality <- read_csv("../data/raw_data/infant_mortality_WPP.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "infant_mortality") %>% rename(country_code = iso) %>% drop_na() %>% 
+infant_mortality <- read_csv("../data/raw_data/outcome_variables/6_infant_death_rate.csv") %>% pivot_longer(`1950`:`2021`, names_to = "year", names_transform = as.integer, values_to = "infant_mortality") %>% rename(country_code = iso) %>% drop_na() %>% 
+  add_former_states("infant_mortality") %>% 
   mutate(infant_mortality = infant_mortality/10) #transform into percentages
 
-doctors <- read_csv("../data/raw_data/doctor_per_population.csv") %>% rename(country_code = iso, doctors = `average (1975 - 1985`) %>% mutate(year=1980)  %>% select(country_code, year, doctors) %>% drop_na()
 
-hospital_beds <- read_csv("../data/raw_data/hospital_bed_per_population.csv") %>% rename(country_code = iso, hospital_beds = `average (1975 - 1985`) %>% mutate(year=1980)  %>% select(country_code, year, hospital_beds) %>% drop_na()
 
 ```
 
+```{r}
+physicians_original <- 
+  read_csv("../data/raw_data/outcome_variables/7_physicians_per_1000_people.csv") %>% 
+  rowwise() %>%  
+  mutate(physicians= mean(c_across(`1975`:`1985`), na.rm = TRUE)) %>% 
+  rename(country_code = iso)
+
+
+physicians <- 
+  physicians_original %>% 
+  mutate( # impute datapoint for Mongolia from 1970
+    physicians = if_else(country_code == "MNG",
+                         physicians_original %>%
+                           filter(country_code == "MNG") %>% 
+                           pull(`1970`), 
+                         physicians)) %>% 
+  ungroup() %>% 
+  mutate(year=1980)  %>% 
+  select(country_code, year, physicians) %>% 
+  drop_na() %>% 
+  add_former_states("physicians")
+
+
+
+hospital_beds <- 
+  read_csv("../data/raw_data/outcome_variables/8_hospital_beds_per_1000_people.csv") %>% 
+  rowwise() %>%  
+  mutate(hospital_beds = mean(c_across(`1975`:`1985`), na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  rename(country_code = iso) %>% 
+  mutate(year=1980)  %>% 
+  select(country_code, year, hospital_beds) %>% 
+  drop_na() %>% 
+  add_former_states("hospital_beds")
+```
 
 
 ### Water
 ```{r}
-death_rate_sanitation <- read_csv("../data/raw_data/death_rate_sanitation_GBDS.csv") %>% pivot_longer(`1990`:`2019`, names_to = "year", names_transform = as.integer, values_to = "death_rate_sanitation") %>% rename(country_code = iso) %>% drop_na() %>% mutate(death_rate_sanitation = death_rate_sanitation/1000)
+death_rate_sanitation <- 
+  read_csv("../data/raw_data/outcome_variables/9_sanitation_death_rate.csv") %>% 
+  pivot_longer(`1990`:`2019`, names_to = "year", names_transform = as.integer, values_to = "death_rate_sanitation") %>% 
+  rename(country_code = iso) %>% 
+  drop_na() %>%
+  add_former_states("death_rate_sanitation") %>% 
+  mutate(death_rate_sanitation = death_rate_sanitation/1000)
 ```
+
 ### Education
 ```{r}
-years_schooling <- read_csv("../data/raw_data/avg_years_schooling_ClioInfra.csv") %>% pivot_longer(`1820`:`2010`, names_to = "year", names_transform = as.integer, values_to = "years_schooling") %>% rename(country_code = iso) %>% drop_na() 
+years_schooling <- 
+  read_csv("../data/raw_data/outcome_variables/10_average_years_education.csv") %>% 
+  pivot_longer(`1500`:`2050`, names_to = "year", names_transform = as.integer, values_to = "years_schooling") %>% 
+  rename(country_code = iso) %>% 
+  drop_na() %>% 
+  add_former_states("years_schooling") %>% 
+  drop_na()
 
-literacy <- read_csv("../data/raw_data/literacy(WorldDevReport).csv") %>% rename(country_code = iso) %>% mutate(year = 1980) %>% select(country_code, year, literacy_rate = `Literacy rate (1980)`)
+literacy <- read_csv("../data/raw_data/outcome_variables/11_adult_literacy_rate.csv") %>% 
+  rename(country_code = iso) %>% 
+  mutate(year = 1980) %>% 
+  select(country_code, year, literacy_rate = `Literacy rate (1980)`)
 
 ```
 ### Energy 
 ```{r}
-electricity_access <- read_csv("../data/raw_data/electricity_access_%_WorldBank.csv") %>% pivot_longer(`1990`:`2016`, names_to = "year", names_transform = as.integer, values_to = "electricity_access") %>% rename(country_code = `Country Code`)  %>% select(country_code, year, electricity_access) %>%  drop_na()
+electricity_access <- 
+  read_csv("../data/raw_data/outcome_variables/12_access_to_electricity.csv") %>% 
+  pivot_longer(`1990`:`2016`, names_to = "year", names_transform = as.integer, values_to = "electricity_access") %>% 
+  rename(country_code = `Country Code`) %>% 
+  select(country_code, year, electricity_access) %>%  
+  drop_na() %>% 
+  add_former_states("electricity_access") %>% 
+  drop_na()
 
 ```
 
@@ -402,20 +444,20 @@ electricity_access <- read_csv("../data/raw_data/electricity_access_%_WorldBank.
 ### Social equity
 
 ```{r}
-gini_original <- read_csv("../data/raw_data/Gini coefficient (Solt).csv") %>% 
+gini_original <- read_csv("../data/raw_data/outcome_variables/13_gini_index.csv") %>% 
   mutate(country_code = countrycode(`Country Name`, origin='country.name', destination = 'iso3c')) %>%
   mutate(country_code = if_else(`Country Name`== "Yugoslavia", "YUG", country_code)) %>% 
   mutate(country_code = if_else(`Country Name`== "Czechoslovakia", "CSK", country_code)) %>% 
   mutate(country_code = if_else(`Country Name`== "Soviet Union", "SUN", country_code)) %>% 
   pivot_longer(`1960`:`2022`, names_to = "year", names_transform = as.integer, values_to = "gini_index")  %>% select(country_code, year, gini_index) 
 
-# impute 1981 datapoints for Poland, Bulgaria and Romania from later values
+# impute 1980 datapoints for Poland, Bulgaria and Romania from later values
 gini <- gini_original %>% 
-  mutate(gini_index = if_else(country_code == "POL" & year == 1981,
+  mutate(gini_index = if_else(country_code == "POL" & year == 1980,
                         gini_original %>% filter(country_code == "POL" & year == 1983) %>% pull(gini_index), # %>% `[`(1),
-                        if_else(country_code == "ROU" & year == 1981,
+                        if_else(country_code == "ROU" & year == 1980,
                         gini_original %>% filter(country_code == "ROU" & year == 1989) %>% pull(gini_index), # %>% `[`(1),
-                        if_else(country_code == "BGR" & year == 1981,
+                        if_else(country_code == "BGR" & year == 1980,
                         gini_original %>% filter(country_code == "BGR" & year == 1989) %>% pull(gini_index), # %>% `[`(1),
                         gini_index)))
                         ) %>%
@@ -424,7 +466,8 @@ gini <- gini_original %>%
 
 
 ```{r}
-social_services_original <- read_csv("../data/raw_data/equal-resource-distribution-index.csv") %>% select(country_code = Code, year = Year, social_services = equal_res_vdem_owid) %>% 
+
+social_services_original <- read_csv("../data/raw_data/outcome_variables/14_equal_resource_distribution_index.csv") %>% select(country_code = Code, year = Year, social_services = equal_res_vdem_owid) %>% 
   drop_na() %>%
   pivot_wider(names_from = year, values_from = social_services) %>% 
   full_join(regime_type %>% select(country_code, country_name, former_state)) %>% 
@@ -456,16 +499,41 @@ social_services <-
 
 ### Gender equality
 ```{r}
-women_parliament <- read_csv("../data/raw_data/share-of-women-in-parliament.csv") %>% select(country_code = Code, year = Year, women_parliament = wom_parl_vdem_owid) %>% drop_na()
+women_parliament <- 
+  read_csv("../data/raw_data/outcome_variables/15_share_of_women_in_parliament.csv") %>% 
+  select(country_code = Code, year = Year, women_parliament = wom_parl_vdem_owid) %>% 
+  drop_na %>% 
+  add_former_states("women_parliament") %>% 
+  drop_na()
 
-female_labour <- read_csv("../data/raw_data/female_labour.csv") %>% pivot_longer(`1960`:`2022`, names_to = "year", names_transform = as.integer, values_to = "female_labour") %>% rename(country_code = `Country Code`) %>% select(country_code, year, female_labour) %>% drop_na()
+female_labour <- 
+  read_csv("../data/raw_data/outcome_variables/16_female_labor_force_percent_of_total_labor_force.csv") %>% 
+  pivot_longer(`1960`:`2022`, names_to = "year", names_transform = as.integer, values_to = "female_labour") %>% 
+  rename(country_code = `Country Code`) %>% 
+  select(country_code, year, female_labour) %>% 
+  drop_na() %>% 
+  add_former_states("female_labour") %>% 
+  drop_na()
 
-female_labour_income <- read_csv("../data/raw_data/female_labour_income_share_percent.csv") %>% pivot_longer(`1991`:`2019`, names_to = "year", names_transform = as.integer, values_to = "female_labour_income") %>% select(country_code = iso3, year, female_labour_income) %>% drop_na() %>% mutate(female_labour_income = female_labour_income*100) #transform into percentages
+female_labour_income <- 
+  read_csv("../data/raw_data/outcome_variables/17_female_labour_income_share.csv") %>% 
+  pivot_longer(`1991`:`2019`, names_to = "year", names_transform = as.integer, values_to = "female_labour_income") %>% 
+  select(country_code = iso3, year, female_labour_income) %>% 
+  drop_na() %>% 
+  add_former_states("female_labour_income") %>% 
+  drop_na() %>% 
+  mutate(female_labour_income = female_labour_income*100) #transform into percentages
 
 
-
-adolescent_pregnancies <- read_csv("../data/raw_data/adolescent_pregnancy.csv") %>% pivot_longer(`1960`:`2022`, names_to = "year", names_transform = as.integer, values_to = "adolescent_pregnancies") %>% rename(country_code = `Country Code`) %>% select(country_code, year, adolescent_pregnancies) %>% drop_na() %>% 
-  mutate(adolescent_pregnancies = adolescent_pregnancies/10) #transform into percentages
+adolescent_fertility <- 
+  read_csv("../data/raw_data/outcome_variables/18_adolescent_fertility_rate.csv") %>% 
+  pivot_longer(`1960`:`2022`, names_to = "year", names_transform = as.integer, values_to = "adolescent_fertility") %>% 
+  rename(country_code = `Country Code`) %>% 
+  select(country_code, year, adolescent_fertility) %>% 
+  drop_na() %>% 
+  add_former_states("adolescent_fertility") %>% 
+  drop_na() %>% 
+  mutate(adolescent_fertility = adolescent_fertility/10) #transform into percentages
 ```
 
 
@@ -474,7 +542,7 @@ adolescent_pregnancies <- read_csv("../data/raw_data/adolescent_pregnancy.csv") 
 
 
 physical_integrity_rights_original <- 
-  read_csv("../data/raw_data/physical-integrity-rights-index-vdem.csv") %>% 
+  read_csv("../data/raw_data/outcome_variables/19_physical_integrity_rights_index_vdem.csv") %>% 
   dplyr::select(country_code = Code, year = Year, physical_integrity_rights = phys_integr_libs_vdem_owid) %>% 
   drop_na() %>% 
   pivot_wider(names_from = year, values_from = physical_integrity_rights) %>% 
@@ -512,7 +580,7 @@ data_all <- full_join(life_expect,GDP_MER) %>%
   full_join(population) %>%
   full_join(material_footprint) %>% 
   full_join(co2) %>% 
-  full_join(co2_new) %>% 
+  full_join(co2_old) %>% 
   full_join(regime_type) %>% 
   
   full_join(poverty_rate) %>% 
@@ -521,7 +589,7 @@ data_all <- full_join(life_expect,GDP_MER) %>%
   
   full_join(child_mortality) %>% 
   full_join(infant_mortality) %>%
-  full_join(doctors) %>%
+  full_join(physicians) %>%
   full_join(hospital_beds) %>% 
   
   full_join(death_rate_sanitation) %>% 
@@ -537,10 +605,10 @@ data_all <- full_join(life_expect,GDP_MER) %>%
   full_join(women_parliament) %>% 
   full_join(female_labour) %>% 
   full_join(female_labour_income) %>% 
-  full_join(adolescent_pregnancies) %>% 
+  full_join(adolescent_fertility) %>% 
   
   full_join(physical_integrity_rights) %>% 
-  relocate(country_code, country_name, regime_type, year, GDP_PPP, GDP_MER, material_footprint, co2, co2_new, poverty_rate, death_rate_malnutrition, calorie_availability, .before = life_expect) %>% 
+  relocate(country_code, country_name, regime_type, year, GDP_PPP, GDP_MER, material_footprint, co2, co2_old, poverty_rate, death_rate_malnutrition, calorie_availability, .before = life_expect) %>% 
   drop_na(regime_type) %>% 
   filter(year>=1850)
 

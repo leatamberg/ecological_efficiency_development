@@ -269,11 +269,11 @@ generate_supplementary_information <- function(model, vcov, model_sat = NULL, vc
   x.name <- switch(pred,
                    "GDP_PPP" = "GDP per capita",
                    "material_footprint" = "Material footprint per capita",
-                   "co2_new" = "CO$_2$ emissions per capita")
+                   "co2" = "CO$_2$ emissions per capita")
   x.label <- switch(pred,
                     "GDP_PPP" = "GDP ($ per capita)",
                     "material_footprint" = "Material footprint (tons per capita)",
-                    "co2_new" = expression(paste(CO[2], " emissions (tons per capita)"))
+                    "co2" = expression(paste(CO[2], " emissions (tons per capita)"))
   )
   
   

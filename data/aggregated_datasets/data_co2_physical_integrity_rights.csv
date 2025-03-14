@@ -1,4 +1,4 @@
-country_code,country_name,regime_type,co2_new,physical_integrity_rights
+country_code,country_name,regime_type,co2,physical_integrity_rights
 AFG,Afghanistan,revolutionary,0.16696644693561075,0.106
 AGO,Angola,revolutionary,1.0914437601870344,0.075
 ALB,Albania,socialist,1.9703733112264967,0.029

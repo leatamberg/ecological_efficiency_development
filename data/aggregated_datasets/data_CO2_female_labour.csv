@@ -1,4 +1,4 @@
-country_code,country_name,regime_type,co2_new,female_labour
+country_code,country_name,regime_type,co2,female_labour
 AFG,Afghanistan,revolutionary,0.21955848269372885,16.86604478
 AGO,Angola,revolutionary,1.09344333405558,49.98131676
 ALB,Albania,socialist,2.145855243279796,40.80567314
@@ -117,7 +117,7 @@ SGP,Singapore,capitalist_periphery,13.460066142328378,36.90617433
 SLE,Sierra Leone,capitalist_periphery,0.23330131130601073,51.1959674
 SLV,El Salvador,capitalist_periphery,0.5607638277438909,35.14122834
 SOM,Somalia,revolutionary,0.10013565712221312,33.1564737
-SUN,USSR,socialist,10.856498077548697,47.61634711984695
+SUN,USSR,socialist,10.856498077548697,47.61154551792748
 SUR,Suriname,capitalist_periphery,4.249713013068171,35.33417802
 SWE,Sweden,capitalist_core,10.839804078759585,47.79222284
 SWZ,Swaziland,capitalist_periphery,2.452651314926715,43.4125759
@@ -134,7 +134,7 @@ USA,United States,capitalist_core,20.373216588933204,44.43386804
 VEN,Venezuela,capitalist_periphery,3.999827997875885,38.17400506
 VNM,Vietnam,socialist,0.31874076562530534,50.83550833
 YEM,Yemen,revolutionary,0.6177683575275603,18.88279398
-YUG,Yugoslavia,socialist,4.691947013255465,41.73008181255495
+YUG,Yugoslavia,socialist,4.691947013255465,41.71619431461845
 ZAF,South Africa,capitalist_periphery,7.598778135042532,41.49643685
 ZMB,Zambia,capitalist_periphery,0.9434452957275624,46.28964765
 ZWE,Zimbabwe,revolutionary,1.4532281409598833,46.86621397

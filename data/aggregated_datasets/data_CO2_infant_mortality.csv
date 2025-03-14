@@ -1,4 +1,4 @@
-country_code,country_name,regime_type,co2_new,infant_mortality
+country_code,country_name,regime_type,co2,infant_mortality
 AFG,Afghanistan,revolutionary,0.16696644693561075,16.7762
 AGO,Angola,revolutionary,1.0914437601870344,13.7849
 ALB,Albania,socialist,1.9703733112264967,5.2445
@@ -31,7 +31,7 @@ COG,Congo,revolutionary,1.5002990641941152,6.9285
 COL,Colombia,capitalist_periphery,1.5265464288228716,4.5652
 CPV,Cape Verde,capitalist_periphery,0.6439754344068387,6.6958
 CRI,Costa Rica,capitalist_periphery,0.9955134342920496,2.7534
-CSK,Czechoslovakia,socialist,13.083457047512296,1.7256093790000002
+CSK,Czechoslovakia,socialist,13.083457047512296,1.72560937921519
 CUB,Cuba,socialist,2.413284464677635,1.7646000000000002
 CYP,Cyprus,capitalist_periphery,3.716967914659558,1.6588999999999998
 DEU,Germany,capitalist_core,14.058484350249895,1.2752
@@ -117,7 +117,7 @@ SGP,Singapore,capitalist_periphery,10.552581046120658,1.2155
 SLE,Sierra Leone,capitalist_periphery,0.2392757697440399,17.1068
 SLV,El Salvador,capitalist_periphery,0.5300853382474775,10.4005
 SOM,Somalia,revolutionary,0.07990038283101997,11.9846
-SUN,USSR,socialist,10.007316088614738,4.015545522
+SUN,USSR,socialist,10.007316088614738,4.015331368687008
 SUR,Suriname,capitalist_periphery,4.042587985372479,5.1502
 SWE,Sweden,capitalist_core,11.374140308131903,0.689
 SWZ,Swaziland,capitalist_periphery,2.2020886140438867,7.8787
@@ -135,7 +135,7 @@ USA,United States,capitalist_core,20.44277758396635,1.2701
 VEN,Venezuela,capitalist_periphery,3.6474141626498935,3.5459000000000005
 VNM,Vietnam,socialist,0.35393109773156844,4.8599
 YEM,Yemen,revolutionary,0.5326883583084371,13.9798
-YUG,Yugoslavia,socialist,4.095396465286535,2.896567245
+YUG,Yugoslavia,socialist,4.095396465286535,2.894902712959463
 ZAF,South Africa,capitalist_periphery,7.008170568336172,6.8656999999999995
 ZMB,Zambia,capitalist_periphery,1.1093761320184656,9.3757
 ZWE,Zimbabwe,revolutionary,1.5223192966338046,6.6911000000000005

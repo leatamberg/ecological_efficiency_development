@@ -1,4 +1,4 @@
-country_code,country_name,regime_type,co2_new,gini_index
+country_code,country_name,regime_type,co2,gini_index
 ARG,Argentina,capitalist_periphery,3.3220583366995133,38.4
 AUS,Australia,capitalist_core,12.012073702242182,27.3
 BEL,Belgium,capitalist_core,12.03495446885757,24.5

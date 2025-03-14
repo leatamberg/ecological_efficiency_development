@@ -1,4 +1,4 @@
-country_code,country_name,regime_type,co2_new,calorie_availability
+country_code,country_name,regime_type,co2,calorie_availability
 AFG,Afghanistan,revolutionary,0.16696644693561075,2478
 AGO,Angola,revolutionary,1.0914437601870344,1967
 ALB,Albania,socialist,1.9703733112264967,2596
